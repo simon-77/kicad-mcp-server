@@ -64,3 +64,13 @@ Thumbs.db
 *.bak
 *.kicad_sch-bak
 *.kicad_pcb-bak
+
+# Test output and temporary files
+/tmp/
+test_*.py
+!tests/test_*.py
+*_test_*.py
+
+# Temporary documentation
+SELF_VALIDATION_SUMMARY.md
+IMPLEMENTATION_*.md

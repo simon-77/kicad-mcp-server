@@ -1,41 +1,19 @@
-"""KiCad project creation tools for KiCad MCP Server - Updated for KiCad 9.0+
+"""Core implementation functions for KiCad MCP Server tools.
 
-Uses KiCad's template projects to ensure 100% compatibility.
+These functions contain the actual logic without MCP decorators,
+making them testable and reusable.
 """
 
 from pathlib import Path
-from typing import List, Optional
-from ..server import mcp
-import uuid
+from typing import Optional
 import json
 import shutil
 import re
+import uuid
 from datetime import datetime
 
 
-def _find_kicad_template() -> Optional[Path]:
-    """Find KiCad template directory."""
-    possible_templates = [
-        Path("/Applications/KiCad/KiCad.app/Contents/SharedSupport/template/Arduino_Mega"),
-        Path("/usr/share/kicad/template/Arduino_Mega"),
-        Path("C:/Program Files/KiCad/9.0/share/kicad/template/Arduino_Mega"),
-        Path("/Applications/KiCad/KiCad.app/Contents/SharedSupport/template/EuroCard160mmX100mm"),
-    ]
-
-    for template_path in possible_templates:
-        if template_path.exists():
-            return template_path
-
-    return None
-
-
-def _get_date_string() -> str:
-    """Get current date in ISO format."""
-    return datetime.now().strftime("%Y-%m-%d")
-
-
-@mcp.tool()
-async def create_kicad_project(
+def create_kicad_project_impl(
     project_path: str,
     project_name: str,
     title: str = "",
@@ -55,12 +33,22 @@ async def create_kicad_project(
     Returns:
         Confirmation message with created files
     """
-    try:
-        # Find KiCad template
-        template_path = _find_kicad_template()
+    # Find KiCad template
+    possible_templates = [
+        Path("/Applications/KiCad/KiCad.app/Contents/SharedSupport/template/Arduino_Mega"),
+        Path("/usr/share/kicad/template/Arduino_Mega"),
+        Path("C:/Program Files/KiCad/9.0/share/kicad/template/Arduino_Mega"),
+        Path("/Applications/KiCad/KiCad.app/Contents/SharedSupport/template/EuroCard160mmX100mm"),
+    ]
 
-        if not template_path:
-            return """❌ KiCad template not found.
+    template_path = None
+    for path in possible_templates:
+        if path.exists():
+            template_path = path
+            break
+
+    if not template_path:
+        return f"""❌ KiCad template not found.
 
 Please ensure KiCad is installed:
   macOS:   brew install --cask kicad
@@ -70,10 +58,11 @@ Please ensure KiCad is installed:
 After installation, this tool will use KiCad's template to create projects.
 """
 
+    try:
         path = Path(project_path)
         path.mkdir(parents=True, exist_ok=True)
 
-        date_str = _get_date_string()
+        date_str = datetime.now().strftime("%Y-%m-%d")
         title_text = title or project_name
 
         # Copy all files from template
@@ -171,8 +160,8 @@ The project will open in KiCad 9.0+ **without** version warnings!
 ## 🔧 Next Steps:
 
 1. Open schematic editor to add components
-2. Use `add_component_from_library` to add parts
-3. Use `add_wire` and `add_global_label` for connections
+2. Use component tools to add parts
+3. Use wire and label tools for connections
 4. Update PCB from schematic when ready
 
 Project is ready for KiCad 9.0+! 🚀
@@ -180,4 +169,4 @@ Project is ready for KiCad 9.0+! 🚀
 
     except Exception as e:
         import traceback
-        return f"Error creating project: {e}\\n\\n{traceback.format_exc()}"
+        return f"Error creating project: {e}\n\n{traceback.format_exc()}"

@@ -15,6 +15,7 @@ from . import (
     editor,
     pcb_editor,
     project,
+    schematic_editor,
 )
 
-__all__ = ["schematic", "pcb", "summary", "testgen", "drc", "components", "editor", "pcb_editor", "project"]
+__all__ = ["schematic", "pcb", "summary", "testgen", "drc", "components", "editor", "pcb_editor", "project", "schematic_editor"]

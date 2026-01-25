@@ -743,9 +743,11 @@ Commit types:
 ## Roadmap
 
 ### Immediate (This Week)
-- [ ] Implement `validate_schematic` tool
-- [ ] Implement `check_kicad_compatibility` tool
-- [ ] Implement `compile_test_code` tool
+- [x] Implement `validate_schematic` tool
+- [x] Implement `check_kicad_compatibility` tool
+- [x] Implement `compile_test_code` tool
+- [ ] **CRITICAL BUG FIX: Fix component parsing** 🔴
+- [ ] **CRITICAL BUG FIX: Make MCP tools actually work** 🔴
 - [ ] Create test fixtures
 - [ ] Add unit tests
 
@@ -767,3 +769,486 @@ Commit types:
 - **CLAUDE.md** - Development documentation
 - **PLAN.md** - This file (implementation plan)
 - **TESTING.md** - 🆕 Testing guide (to be created)
+
+---
+
+## 🔴 CRITICAL BUGS DISCOVERED (2025-01-25)
+
+### Bug 1: Component Parsing Not Working
+
+**Problem:**
+- `schematic_editor.py` adds components to `.kicad_sch` files
+- Components are written to file and visible in text
+- **BUT** `SchematicParser` cannot find these components (returns 0)
+- All MCP analysis tools fail to recognize added components
+
+**Evidence:**
+```
+Created file: esp32s3_dev_board.kicad_sch (86KB)
+grep finds: 6 components
+Parser returns: 0 components  ← WRONG!
+```
+
+**Root Cause Analysis:**
+
+Comparing our generated format vs KiCad standard:
+
+**KiCad Standard Format:**
+```lisp
+(symbol (lib_id "Device:R") (at 100 100 0) (unit 1)
+  (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)
+  (uuid 12345678-1234-1234-1234-123456789abc)
+  (property "Reference" "R1" (at 95 95 0)
+    (effects (font (size 1.27 1.27)))
+  )
+  (property "Value" "10k" (at 95 105 0)
+    (effects (font (size 1.27 1.27)))
+  )
+  (property "Footprint" "Resistor_SMD:R_0805_2012Metric" (at 100 100 0)
+    (effects (font (size 1.27 1.27)) hide)
+  )
+  (pin "1" (uuid 11111111-1111-1111-1111-111111111111))
+  (pin "2" (uuid 22222222-2222-2222-2222-222222222222))
+)
+```
+
+**Our Generated Format (Missing Fields):**
+```lisp
+(symbol (lib_id "Device:R") (at 100 100 0) (unit 1) (in_bom yes) (on_board yes) (dnp no)
+  (uuid e659230c-820b-4dcc-a118-6caf3989634d)
+  (property "Reference" "R1" (at 100 100 0)
+    (effects (font (size 1.27 1.27)))
+  )
+  (property "Value" "220" (at 100 102.54 0)
+    (effects (font (size 1.27 1.27)))
+  )
+  (property "Footprint" "Resistor_SMD:R_0805_2012Metric" (at 100 105.08 0)
+    (effects (font (size 1.27 1.27)) (justify left) hide)
+  )
+  ❌ MISSING: exclude_from_sim
+  ❌ MISSING: pin definitions
+)
+```
+
+**Missing Fields:**
+1. ❌ `exclude_from_sim` attribute
+2. ❌ `pin` definitions (critical!)
+3. ⚠️  UUID format might be wrong
+4. ⚠️  Property positions might be off
+
+### Bug 2: Round-Trip Validation Fails
+
+**Problem:**
+- We claimed to implement "Round-Trip Validation"
+- Create → Analyze → Verify should work
+- **BUT** Analysis tools return 0 components
+- Validation cannot verify what was created
+
+**Impact:**
+- ❌ Cannot verify schematic correctness
+- ❌ Cannot verify component connections
+- ❌ Cannot verify GPIO assignments
+- ❌ Generated test code might be wrong
+
+**Why This Matters:**
+- User asked: "你是通过mcp工具打开kicad工程然后分析出来的吗"
+- Answer: NO! We manually wrote the "analysis"
+- This defeats the purpose of Round-Trip Validation!
+
+---
+
+## 📋 Critical Fix Implementation Plan
+
+### Phase 1: Fix Component Format (URGENT)
+
+**File:** `src/kicad_mcp_server/tools/schematic_editor.py`
+
+**Task 1.1: Add `exclude_from_sim` attribute**
+```python
+# Current (WRONG):
+component_entry = f'''  (symbol (lib_id "{lib_id}") (at {x} {y} 0) (unit {unit}) (in_bom yes) (on_board yes) (dnp no)
+
+# Fixed (CORRECT):
+component_entry = f'''  (symbol (lib_id "{lib_id}") (at {x} {y} 0) (unit {unit})
+  (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)
+```
+
+**Task 1.2: Add pin definitions**
+```python
+# Need to add pin definitions based on symbol type
+# This requires symbol library lookup or pin mapping
+
+def get_pins_for_symbol(symbol_name: str, library_name: str) -> list:
+    """Get pin definitions for a symbol."""
+    # TODO: Implement symbol library lookup
+    # For now, add generic pin definitions
+
+    if library_name == "Device":
+        if symbol_name == "R":
+            return [
+                (1, "passive", ""),
+                (2, "passive", "")
+            ]
+        elif symbol_name == "LED":
+            return [
+                (1, "passive", ""),
+                (2, "passive", "")
+            ]
+        elif symbol_name == "C":
+            return [
+                (1, "passive", ""),
+                (2, "passive", "")
+            ]
+    # ... more symbols
+
+    return []
+```
+
+**Task 1.3: Generate complete component block**
+```python
+def add_component_from_library(...):
+    # ... existing code ...
+
+    # Get pins for this symbol
+    pins = get_pins_for_symbol(symbol_name, library_name)
+
+    # Build pin entries
+    pin_entries = []
+    for pin_num, pin_type, pin_name in pins:
+        pin_uuid = str(uuid.uuid4())
+        pin_entries.append(f'  (pin "{pin_num}" (uuid {pin_uuid}))')
+
+    # Complete component entry with pins
+    component_entry = f'''  (symbol (lib_id "{lib_id}") (at {x} {y} 0) (unit {unit})
+  (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)
+    (uuid {comp_uuid})
+    (property "Reference" "{reference}" (at {x} {y - 5} 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Value" "{value}" (at {x} {y + 2.54} 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" "{footprint}" (at {x} {y + 5.08} 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+{chr(10).join(pin_entries)}
+  )
+'''
+```
+
+### Phase 2: Implement Symbol Library Lookup
+
+**Task 2.1: Create symbol library interface**
+
+```python
+# src/kicad_mcp_server/symbol_libraries.py
+
+class SymbolLibrary:
+    """Interface to KiCad symbol libraries."""
+
+    def __init__(self):
+        self.kicad_path = self._find_kicad_path()
+        self.lib_paths = self._get_library_paths()
+
+    def get_symbol_info(self, library_name: str, symbol_name: str):
+        """Get symbol information including pins."""
+        # Read .kicad_sym file
+        # Parse symbol definition
+        # Return pin definitions
+        pass
+
+    def list_symbols(self, library_name: str):
+        """List all symbols in a library."""
+        pass
+```
+
+**Task 2.2: Map common symbols to pins**
+
+```python
+# Pin definitions for common components
+SYMBOL_PINS = {
+    "Device:R": [
+        (1, "passive", ""),
+        (2, "passive", "")
+    ],
+    "Device:LED": [
+        (1, "passive", "K"),
+        (2, "passive", "A")
+    ],
+    "Device:C": [
+        (1, "passive", ""),
+        (2, "passive", "")
+    ],
+    "Switch:SW_Push": [
+        (1, "passive", ""),
+        (2, "passive", ""),
+        (1, "input", ""),
+        (2, "input", "")
+    ],
+    # ... more symbols
+}
+```
+
+### Phase 3: Fix SchematicParser
+
+**Task 3.1: Update parser to handle our format**
+
+```python
+# src/kicad_mcp_server/parsers/schematic_parser.py
+
+def _parse_symbol(self, symbol_data):
+    """Parse a symbol from schematic."""
+    # Update to handle symbols with/without exclude_from_sim
+    # Update to handle symbols with/without pins
+    # Make parsing more robust
+    pass
+```
+
+### Phase 4: Validate Round-Trip
+
+**Task 4.1: Create round-trip validation test**
+
+```python
+# tests/test_round_trip.py
+
+async def test_component_round_trip():
+    """Test that components can be added and then parsed."""
+
+    # 1. Create project
+    project = await create_kicad_project(...)
+
+    # 2. Add component
+    await add_component_from_library(
+        file_path=project.sch,
+        library_name="Device",
+        symbol_name="R",
+        reference="R1",
+        value="1k"
+    )
+
+    # 3. Parse and verify
+    parser = SchematicParser(project.sch)
+    components = parser.get_components()
+
+    # 4. Assert component is found
+    assert len(components) == 1
+    assert components[0].reference == "R1"
+    assert components[0].value == "1k"
+
+    print("✅ Round-trip validation passed!")
+```
+
+**Task 4.2: Create ESP32S3 round-trip test**
+
+```python
+async def test_esp32s3_round_trip():
+    """Test complete ESP32S3 design with all components."""
+
+    # Create ESP32S3 + OLED + LED + Button design
+    # Add all components
+    # Add all connections
+    # Parse and verify
+    # Generate analysis report
+    # Generate test code
+
+    # Verify:
+    # - All 6 components found
+    # - I2C connections detected
+    # - GPIO assignments correct
+    # - Test code matches schematic
+
+    assert component_count == 6
+    assert "ESP32" in analysis
+    assert "I2C" in connections
+    assert "GPIO6" in pins
+    assert "GPIO7" in pins
+```
+
+### Phase 5: Implement Natural Language Design (Long-term)
+
+**Task 5.1: Parse design specifications**
+
+```python
+# src/kicad_mcp_server/nlp.py
+
+def parse_design_spec(spec: str) -> dict:
+    """Parse natural language design specification.
+
+    Example:
+        "Use ESP32S3, add OLED display and IMU sensor,
+         layout on 30x30mm PCB"
+
+    Returns:
+        {
+            "mcu": "ESP32S3",
+            "peripherals": [
+                {"type": "OLED", "interface": "I2C"},
+                {"type": "IMU", "interface": "I2C"}
+            ],
+            "pcb_size": "30x30mm"
+        }
+    """
+    # Use regex or NLP to extract
+    # - MCU type
+    # - Peripherals
+    # - Interfaces
+    # - PCB dimensions
+    pass
+```
+
+**Task 5.2: Auto-connect components**
+
+```python
+def auto_connect_peripherals(components: list, mcu_pins: dict):
+    """Automatically connect peripherals to MCU.
+
+    Args:
+        components: List of peripherals with interfaces
+        mcu_pins: Available MCU pins
+
+    Returns:
+        Connection list
+    """
+    # Auto-assign I2C pins
+    # Auto-assign SPI pins
+    # Auto-assign GPIO pins
+    # Generate net names
+    # Add labels
+    pass
+```
+
+---
+
+## 📊 Updated Implementation Priority
+
+### 🔴 CRITICAL (Must Fix Immediately)
+
+1. **Fix component format in `schematic_editor.py`**
+   - Add `exclude_from_sim` attribute
+   - Add pin definitions
+   - Test round-trip parsing
+
+2. **Fix `SchematicParser`**
+   - Handle incomplete component definitions
+   - Make parser more robust
+   - Add better error messages
+
+3. **Implement round-trip validation test**
+   - Create test: Add → Parse → Verify
+   - Verify all components found
+   - Verify all connections detected
+
+4. **Fix analysis tools**
+   - Ensure `summarize_schematic` works
+   - Ensure `list_schematic_components` works
+   - Ensure `analyze_schematic_nets` works
+
+### High Priority (This Week)
+
+5. **Create symbol library lookup**
+   - Implement symbol library interface
+   - Map common symbols to pins
+   - Support ESP32, Arduino, etc.
+
+6. **Generate real analysis reports**
+   - Use MCP tools to analyze
+   - Extract actual component data
+   - Extract actual GPIO connections
+   - Generate real BOM
+
+### Medium Priority (This Month)
+
+7. **Implement auto-routing**
+   - Auto-assign I2C pins
+   - Auto-assign SPI pins
+   - Auto-connect power nets
+   - Generate net names
+
+8. **Natural language parsing**
+   - Parse design specs
+   - Extract components
+   - Extract connections
+   - Extract PCB size
+
+---
+
+## 🎯 Success Criteria (Updated)
+
+A tool is considered "working" when:
+- ✅ Components can be added via MCP tool
+- ✅ Added components are parseable by SchematicParser
+- ✅ `list_schematic_components` returns correct count
+- ✅ `summarize_schematic` shows actual components
+- ✅ Round-trip test passes (Add → Parse → Verify)
+- ✅ Generated analysis is based on real data
+- ✅ Generated test code matches actual schematic
+
+---
+
+## 🔨 Implementation Steps
+
+### Step 1: Fix component format (Today)
+1. Update `schematic_editor.py:add_component_from_library()`
+2. Add `exclude_from_sim` attribute
+3. Add pin definitions (start with generic pins)
+4. Test round-trip
+
+### Step 2: Implement pin lookup (This Week)
+1. Create symbol pin mapping database
+2. Implement get_pins_for_symbol()
+3. Add pins for all common components
+4. Test with multiple component types
+
+### Step 3: Validate round-trip (This Week)
+1. Create test: Add R1 → Parse → Verify R1 found
+2. Create test: Add ESP32 → Parse → Verify ESP32 found
+3. Create test: Add 6 components → Parse → Verify all 6 found
+4. Commit with message: "fix: make components parseable"
+
+### Step 4: Generate real analysis (This Week)
+1. Use fixed parser on test project
+2. Verify MCP tools return correct data
+3. Generate analysis from real parsed data
+4. Compare with manual design spec
+
+### Step 5: Document (Ongoing)
+1. Update PLAN.md with progress
+2. Document pin mapping format
+3. Document round-trip test results
+4. Update README with working examples
+
+---
+
+## 📝 Notes
+
+**Current Status:**
+- ✅ Can create KiCad projects
+- ✅ Can write components to files (but not parseable)
+- ❌ Parser cannot find added components
+- ❌ Analysis tools return empty results
+- ❌ Round-trip validation fails
+
+**What Needs to Happen:**
+1. Fix component format
+2. Fix parser
+3. Make round-trip work
+4. Then we can claim "Round-Trip Validation" works
+5. Then we can claim MCP tools actually analyze designs
+
+**Reality Check:**
+- Previous claims: "We can analyze ESP32S3 designs!" ❌ FALSE
+- Actual status: Files created, but parser returns 0 components ❌
+- User question: "你是通过mcp工具打开kicad工程然后分析出来的吗"
+- Honest answer: "NO! We manually wrote the analysis." 😓
+
+**Commitment:**
+We will:
+1. Fix the bugs
+2. Make parser work
+3. Generate REAL analysis from MCP tools
+4. Not fake the results
+5. Document everything
+
+**Next Step:**
+Start implementing fixes immediately. Do not ship broken code.
+Ensure round-trip validation actually works before claiming it does.

@@ -166,18 +166,25 @@ class SchematicParser:
 
         # Find all symbol instances
         # Pattern: (symbol (lib_id ...) (property "Reference" "R1") ...)
-        symbol_pattern = r'\(symbol[^)]*lib_id\s+"([^"]+)"[^)]*\(property\s+"Reference"\s+"([^"]+)"[^)]*\(property\s+"Value"\s+"([^"]+)"'
+        # Use [\s\S]*? to match across newlines (non-greedy)
+        symbol_pattern = r'\(symbol[\s\S]*?lib_id\s+"([^"]+)"[\s\S]*?\(property\s+"Reference"\s+"([^"]+)"[\s\S]*?\(property\s+"Value"\s+"([^"]+)"'
 
         for match in re.finditer(symbol_pattern, content, re.DOTALL):
             lib_id = match.group(1)
             reference = match.group(2)
             value = match.group(3)
 
+            # Build properties in the format expected by from_kicad_skip
+            properties = [
+                {"key": "Reference", "value": reference},
+                {"key": "Value", "value": value},
+            ]
+
             components.append({
                 "lib_id": lib_id,
                 "reference": reference,
                 "value": value,
-                "properties": {"Value": value},
+                "properties": properties,
                 "pins": [],
             })
 

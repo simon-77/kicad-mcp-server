@@ -12,6 +12,77 @@ def _get_date_string() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
+# Pin definitions for common symbols
+SYMBOL_PINS = {
+    "Device:R": [
+        (1, "passive", ""),
+        (2, "passive", "")
+    ],
+    "Device:LED": [
+        (1, "passive", "K"),
+        (2, "passive", "A")
+    ],
+    "Device:C": [
+        (1, "passive", ""),
+        (2, "passive", "")
+    ],
+    "Device:R_POT": [
+        (1, "passive", ""),
+        (2, "passive", ""),
+        (3, "passive", "")
+    ],
+    "Switch:SW_Push": [
+        (1, "passive", ""),
+        (2, "passive", "")
+    ],
+    "MCU_ESP32_S3:ESP32-S3-WROOM-1": [
+        (1, "input", "GPIO0"),
+        (2, "input", "GPIO1"),
+        (3, "input", "GPIO2"),
+        (4, "input", "GPIO3"),
+        (5, "input", "GPIO4"),
+        (6, "input", "GPIO5"),
+        (6, "input", "GPIO6"),
+        (7, "input", "GPIO7"),
+        (8, "input", "GPIO8"),
+        (9, "input", "GPIO9"),
+        (10, "input", "GPIO10"),
+        # ... more pins
+    ],
+    "Display:SSD1306": [
+        (1, "input", "GND"),
+        (2, "input", "SCL"),
+        (3, "input", "SDA"),
+        (4, "input", "VCC"),
+        # ... more pins
+    ],
+}
+
+
+def get_pins_for_symbol(library_name: str, symbol_name: str) -> List[Tuple[int, str, str]]:
+    """Get pin definitions for a symbol.
+
+    Args:
+        library_name: Library name (e.g., "Device", "MCU_ESP32_S3")
+        symbol_name: Symbol name (e.g., "R", "LED", "ESP32-S3-WROOM-1")
+
+    Returns:
+        List of (pin_number, pin_type, pin_name) tuples
+    """
+    lib_id = f"{library_name}:{symbol_name}"
+
+    # Check if we have a predefined pin mapping
+    if lib_id in SYMBOL_PINS:
+        return SYMBOL_PINS[lib_id]
+
+    # Generic fallback for 2-pin devices
+    # This works for resistors, capacitors, LEDs, etc.
+    return [
+        (1, "passive", ""),
+        (2, "passive", "")
+    ]
+
+
 @mcp.tool()
 async def add_wire(
     file_path: str,
@@ -246,30 +317,32 @@ async def add_component_from_library(
         # Create component instance with footprint
         lib_id = f"{library_name}:{symbol_name}"
 
-        # Add footprint property if provided
-        if footprint:
-            component_entry = f'''  (symbol (lib_id "{lib_id}") (at {x} {y} 0) (unit {unit}) (in_bom yes) (on_board yes) (dnp no)
-    (uuid {comp_uuid})
-    (property "Reference" "{reference}" (at {x} {y} 0)
-      (effects (font (size 1.27 1.27)))
-    )
-    (property "Value" "{value}" (at {x} {y + 2.54} 0)
-      (effects (font (size 1.27 1.27)))
-    )
-    (property "Footprint" "{footprint}" (at {x} {y + 5.08} 0)
-      (effects (font (size 1.27 1.27)) (justify left) hide)
-    )
-  )'''
-        else:
-            component_entry = f'''  (symbol (lib_id "{lib_id}") (at {x} {y} 0) (unit {unit}) (in_bom yes) (on_board yes) (dnp no)
-    (uuid {comp_uuid})
-    (property "Reference" "{reference}" (at {x} {y} 0)
-      (effects (font (size 1.27 1.27)))
-    )
-    (property "Value" "{value}" (at {x} {y + 2.54} 0)
-      (effects (font (size 1.27 1.27)))
-    )
-  )'''
+        # Get pins for this symbol
+        pins = get_pins_for_symbol(library_name, symbol_name)
+
+        # Generate pin entries
+        pin_entries = []
+        for pin_num, pin_type, pin_name in pins:
+            pin_uuid = str(uuid.uuid4())
+            pin_entries.append(f'    (pin "{pin_num}" (uuid {pin_uuid}))')
+
+        pins_str = "\n".join(pin_entries) if pin_entries else ""
+
+        # Create component entry with all required fields
+        component_entry = f'''  (symbol (lib_id "{lib_id}") (at {x} {y} 0) (unit {unit})
+  (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)
+  (uuid {comp_uuid})
+  (property "Reference" "{reference}" (at {x} {y - 5} 0)
+    (effects (font (size 1.27 1.27)))
+  )
+  (property "Value" "{value}" (at {x} {y + 2.54} 0)
+    (effects (font (size 1.27 1.27)))
+  )
+  (property "Footprint" "{footprint}" (at {x} {y + 5.08} 0)
+    (effects (font (size 1.27 1.27)) hide)
+  )
+{pins_str}
+)'''
 
         # Insert component before the closing parenthesis
         if content.rstrip().endswith(')'):

@@ -7,6 +7,11 @@ import uuid
 from datetime import datetime
 
 
+def _get_date_string() -> str:
+    """Get current date in ISO format."""
+    return datetime.now().strftime("%Y-%m-%d")
+
+
 @mcp.tool()
 async def create_kicad_project(
     project_path: str,
@@ -31,9 +36,11 @@ async def create_kicad_project(
 
         # Generate UUIDs
         project_uuid = str(uuid.uuid4())
+        date_str = _get_date_string()
+        title_text = title or project_name
 
         # ===== 1. Create .kicad_pro file (KiCad 9.0 format) =====
-        kicad_pro_content = f'''(kicad_pcb (version 20240130) (generator eeschema)
+        kicad_pro_content = f'''(kicad_pro (version {project_uuid})
 
   (general
     (thickness 1.6)
@@ -42,9 +49,9 @@ async def create_kicad_project(
   (paper "A4")
 
   (title_block
-    (title "{title or project_name}")
+    (title "{title_text}")
     (company "{company}")
-    (date "{datetime.now().strftime("%Y-%m-%d")}")
+    (date "{date_str}")
     (rev "1.0")
   )
 
@@ -56,17 +63,18 @@ async def create_kicad_project(
     (34 "B.Paste" user)
     (35 "F.Paste" user)
     (36 "B.SilkS" user "B.Silkscreen")
-    (37 "F.SilkS" user "B.Silkscreen")
+    (37 "F.SilkS" user "F.Silkscreen")
     (38 "B.Mask" user)
     (39 "F.Mask" user)
     (40 "Dwgs.User" user "User.Drawings")
     (41 "Cmts.User" user "User.Comments")
     (42 "Eco1.User" user "User.Eco1")
-    (Eco2.User" user "User.Eco2")
+    (43 "Eco2.User" user "User.Eco2")
     (44 "Edge.Cuts" user)
     (45 "Margin" user)
     (46 "B.CrtYd" user "B.Courtyard")
-    (47 "F.Fab" user)
+    (47 "F.CrtYd" user "B.Courtyard")
+    (48 "B.Fab" user)
     (49 "F.Fab" user)
   )
 
@@ -99,6 +107,7 @@ async def create_kicad_project(
   )
 
 )
+'''
 
         # Write .kicad_pro file
         pro_path = path / f"{project_name}.kicad_pro"
@@ -114,9 +123,9 @@ async def create_kicad_project(
   (paper "A4")
 
   (title_block
-    (title "{title or project_name}")
+    (title "{title_text}")
     (company "{company}")
-    (date "{datetime.now().strftime("%Y-%m-%d")}")
+    (date "{date_str}")
     (rev "1.0")
   )
 
@@ -232,6 +241,7 @@ async def create_kicad_project(
   )
 
 )
+'''
 
         # Write schematic file
         sch_path = path / f"{project_name}.kicad_sch"
@@ -247,9 +257,9 @@ async def create_kicad_project(
   (paper "A4")
 
   (title_block
-    (title "{title or project_name}")
+    (title "{title_text}")
     (company "{company}")
-    (date "{datetime.now().strftime("%Y-%m-%d")}")
+    (date "{date_str}")
     (rev "1.0")
   )
 
@@ -261,7 +271,7 @@ async def create_kicad_project(
     (34 "B.Paste" user)
     (35 "F.Paste" user)
     (36 "B.SilkS" user "B.Silkscreen")
-    (37 "F.SilkS" user "B.Silkscreen")
+    (37 "F.SilkS" user "F.Silkscreen")
     (38 "B.Mask" user)
     (39 "F.Mask" user)
     (40 "Dwgs.User" user "User.Drawings")
@@ -305,6 +315,7 @@ async def create_kicad_project(
   )
 
 )
+'''
 
         # Write PCB file
         pcb_path = path / f"{project_name}.kicad_pcb"
@@ -314,7 +325,7 @@ async def create_kicad_project(
 
 **Project Path:** {path}
 **Project Name:** {project_name}
-**Title:** {title or project_name}
+**Title:** {title_text}
 **Company:** {company}
 
 ## 📄 Files Created:

@@ -119,6 +119,7 @@ async def create_kicad_project(
         d1_uuid = str(uuid.uuid4())
 
         # Simplified symbol definitions that work with KiCad 9.0
+        # Only use Device symbols, avoid power symbols for now
         sch_content = f'''(kicad_sch (version 20240130) (generator eeschema) (uuid {project_uuid})
 
   (paper "A4")
@@ -314,7 +315,7 @@ The project will open in KiCad 9.0+ without any version warnings!
 
 ## 🎨 Ready for Design:
 
-- ✅ Schematic editor with example components
+- ✅ Schematic editor with example components (R1, R2, D1)
 - ✅ PCB editor ready for layout
 - ✅ Proper KiCad 9.0 file format
 - ✅ Compatible with KiCad 9.0 and later
@@ -331,5 +332,5 @@ Project is ready for KiCad 9.0! 🚀"""
 
     except Exception as e:
         import traceback
-        return f"Error creating project: {e}\n\n{traceback.format_exc()}"
+        return f"Error creating project: {e}\\n\\n{traceback.format_exc()}"
 

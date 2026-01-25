@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List
 from ..server import mcp
 import uuid
+import json
 from datetime import datetime
 
 
@@ -39,87 +40,34 @@ async def create_kicad_project(
         date_str = _get_date_string()
         title_text = title or project_name
 
-        # ===== 1. Create .kicad_pro file (KiCad 9.0 format) =====
-        kicad_pro_content = f'''(kicad_pro (version {project_uuid})
-
-  (general
-    (thickness 1.6)
-  )
-
-  (paper "A4")
-
-  (title_block
-    (title "{title_text}")
-    (company "{company}")
-    (date "{date_str}")
-    (rev "1.0")
-  )
-
-  (layers
-    (0 "F.Cu" signal)
-    (31 "B.Cu" signal)
-    (32 "B.Adhes" user "B.Adhesive")
-    (33 "F.Adhes" user "F.Adhesive")
-    (34 "B.Paste" user)
-    (35 "F.Paste" user)
-    (36 "B.SilkS" user "B.Silkscreen")
-    (37 "F.SilkS" user "F.Silkscreen")
-    (38 "B.Mask" user)
-    (39 "F.Mask" user)
-    (40 "Dwgs.User" user "User.Drawings")
-    (41 "Cmts.User" user "User.Comments")
-    (42 "Eco1.User" user "User.Eco1")
-    (43 "Eco2.User" user "User.Eco2")
-    (44 "Edge.Cuts" user)
-    (45 "Margin" user)
-    (46 "B.CrtYd" user "B.Courtyard")
-    (47 "F.CrtYd" user "B.Courtyard")
-    (48 "B.Fab" user)
-    (49 "F.Fab" user)
-  )
-
-  (setup
-    (pad_to_mask_clearance 0)
-    (aux_axis_origin 0)
-    (pcbplotparams
-      (layerselection 0x00010fc_ffffffff)
-      (plotframeref false)
-      (usegerberextensions false)
-      (usegerberattributes false)
-      (usegerberadvancedattributes false)
-      (creategerberjobfile false)
-      (excludeedgelayer true)
-      (linewidth 0.100000)
-      (mode false)
-      (useauxorigin false)
-    )
-  )
-
-  (net 0 "")
-
-  (net_class Default "This is the default net class."
-    (clearance 0.2)
-    (trace_width 0.25)
-    (via_dia 0.8)
-    (via_drill 0.4)
-    (uvia_dia 0.3)
-    (uvia_drill 0.1)
-  )
-
-)
-'''
+        # ===== 1. Create .kicad_pro file (JSON format for KiCad 9.0) =====
+        kicad_pro = {
+            "meta": {
+                "filename": f"{project_name}.kicad_pro",
+                "version": 1
+            },
+            "board": {
+                "design_settings": {
+                    "defaults": {
+                        "board_outline_line_width": 0.1,
+                        "pad_to_mask_clearance": 0.0
+                    }
+                }
+            },
+            "sheets": [],
+            "libraries": []
+        }
 
         # Write .kicad_pro file
         pro_path = path / f"{project_name}.kicad_pro"
-        pro_path.write_text(kicad_pro_content)
+        with open(pro_path, 'w') as f:
+            json.dump(kicad_pro, f, indent=2)
 
         # ===== 2. Create schematic file (KiCad 9.0 format) =====
+        # Create example components with proper placement
+        led_uuid = str(uuid.uuid4())
         r1_uuid = str(uuid.uuid4())
-        r2_uuid = str(uuid.uuid4())
-        d1_uuid = str(uuid.uuid4())
 
-        # Simplified symbol definitions that work with KiCad 9.0
-        # Only use Device symbols, avoid power symbols for now
         sch_content = f'''(kicad_sch (version 20240130) (generator eeschema) (uuid {project_uuid})
 
   (paper "A4")
@@ -132,17 +80,14 @@ async def create_kicad_project(
   )
 
   (lib_symbols
-    (symbol "Device:R_Small" (pin_numbers hide) (pin_names (offset 0)) (in_bom yes) (on_board yes) (exclude_from_sim no)
+    (symbol "Device:R" (pin_numbers hide) (pin_names (offset 0)) (in_bom yes) (on_board yes) (exclude_from_sim no)
       (property "Reference" "R" (at 0 0 0)
         (effects (font (size 1.27 1.27)) hide)
       )
-      (property "Value" "R_Small" (at 0 0 0)
+      (property "Value" "R" (at 0 0 0)
         (effects (font (size 1.27 1.27)) hide)
       )
-      (symbol "R_Small_0_1"
-        (polyline
-          (pts (xy -0.762 0) (xy 0 -0.762) (xy 0.762 0))
-        )
+      (symbol "R_0_1"
         (pin passive line (at -5.08 0 0)
           (length 2.54)
           (name "1" (effects (font (size 1 1))))
@@ -180,32 +125,22 @@ async def create_kicad_project(
     )
   )
 
-  (symbol (lib_id "Device:R_Small") (at 50 50 0) (unit 1) (in_bom yes) (on_board yes) (dnp no)
+  (symbol (lib_id "Device:R") (at 100 50 0) (unit 1) (in_bom yes) (on_board yes) (dnp no)
     (uuid {r1_uuid})
-    (property "Reference" "R1" (at 50 50 0)
+    (property "Reference" "R1" (at 100 50 0)
       (effects (font (size 1.27 1.27)))
     )
-    (property "Value" "1k" (at 50 50 0)
-      (effects (font (size 1.27 1.27)))
-    )
-  )
-
-  (symbol (lib_id "Device:R_Small") (at 50 80 0) (unit 1) (in_bom yes) (on_board yes) (dnp no)
-    (uuid {r2_uuid})
-    (property "Reference" "R2" (at 50 80 0)
-      (effects (font (size 1.27 1.27)))
-    )
-    (property "Value" "10k" (at 50 80 0)
+    (property "Value" "330" (at 100 50 0)
       (effects (font (size 1.27 1.27)))
     )
   )
 
-  (symbol (lib_id "Device:LED") (at 80 50 0) (unit 1) (in_bom yes) (on_board yes) (dnp no)
-    (uuid {d1_uuid})
-    (property "Reference" "D1" (at 80 50 0)
+  (symbol (lib_id "Device:LED") (at 120 50 0) (unit 1) (in_bom yes) (on_board yes) (dnp no)
+    (uuid {led_uuid})
+    (property "Reference" "D1" (at 120 50 0)
       (effects (font (size 1.27 1.27)))
     )
-    (property "Value" "LED_RED" (at 80 50 0)
+    (property "Value" "LED_RED" (at 120 50 0)
       (effects (font (size 1.27 1.27)))
     )
   )
@@ -300,7 +235,7 @@ async def create_kicad_project(
 
 ## 📄 Files Created:
 
-1. **{project_name}.kicad_pro** - KiCad project file (v9.0 format)
+1. **{project_name}.kicad_pro** - KiCad project file (JSON format, v9.0 compatible)
 2. **{project_name}.kicad_sch** - Schematic file (v9.0 format)
 3. **{project_name}.kicad_pcb** - PCB layout file (v9.0 format)
 
@@ -311,22 +246,25 @@ async def create_kicad_project(
 3. Navigate to: {pro_path}
 4. Click Open
 
-The project will open in KiCad 9.0+ without any version warnings!
+The project will open in KiCad 9.0+ **without** version warnings!
 
 ## 🎨 Ready for Design:
 
-- ✅ Schematic editor with example components (R1, R2, D1)
+- ✅ Schematic editor with example LED circuit (R1 + D1)
 - ✅ PCB editor ready for layout
 - ✅ Proper KiCad 9.0 file format
 - ✅ Compatible with KiCad 9.0 and later
 
 ## 🔧 Next Steps:
 
-- Use `add_component` to add more schematic symbols
-- Use `add_footprint` to add PCB footprints
-- Use `create_pcb` + `add_board_outline` to define board shape
-- Use `add_track` to route traces
-- Use `generate_test_code` to create Arduino/ESP-IDF tests
+For ESP32S3 + OLED + Button design:
+
+1. Open schematic editor
+2. Add ESP32S3 symbol from "ESP32_WROVER" library
+3. Add SSD1306 OLED from "Display" library
+4. Add button from "Switch" library
+5. Use `add_wire` tool to connect components
+6. Use `generate_test_code` to create Arduino firmware
 
 Project is ready for KiCad 9.0! 🚀"""
 

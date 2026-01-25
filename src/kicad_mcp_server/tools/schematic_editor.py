@@ -12,151 +12,6 @@ def _get_date_string() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
-# KiCad standard library symbols mapping
-# Use these library:symbol combinations for KiCad 9.0+ compatibility
-KICAD_STANDARD_SYMBOLS = {
-    "ESP32-S3-WROOM-1": {
-        "library": "RF_Module",
-        "symbol": "ESP32-S3-WROOM-1",
-        "pins": []
-    },
-    "SSD1306": {
-        "library": "Display_Graphic",
-        "symbol": "OLED-128O064D",
-        "pins": []
-    },
-    "MPU6050": {
-        "library": "Sensor_Motion",
-        "symbol": "MPU-6050",
-        "pins": []
-    },
-    "ESP32-WROOM-32": {
-        "library": "RF_Module",
-        "symbol": "ESP32-WROOM-32",
-        "pins": []
-    },
-}
-
-# Pin definitions for common symbols
-SYMBOL_PINS = {
-    "Device:R": [
-        (1, "passive", ""),
-        (2, "passive", "")
-    ],
-    "Device:LED": [
-        (1, "passive", "K"),
-        (2, "passive", "A")
-    ],
-    "Device:C": [
-        (1, "passive", ""),
-        (2, "passive", "")
-    ],
-    "Device:R_POT": [
-        (1, "passive", ""),
-        (2, "passive", ""),
-        (3, "passive", "")
-    ],
-    "Switch:SW_Push": [
-        (1, "passive", ""),
-        (2, "passive", "")
-    ],
-    # KiCad standard library symbols
-    "RF_Module:ESP32-S3-WROOM-1": [
-        (1, "input", "GPIO0"),
-        (2, "input", "GPIO1"),
-        (3, "input", "GPIO2"),
-        (4, "input", "GPIO3"),
-        (5, "input", "GPIO4"),
-        (6, "input", "GPIO5"),
-        (7, "input", "GPIO6"),
-        (8, "input", "GPIO7"),
-        (9, "input", "GPIO8"),
-        (10, "input", "GPIO9"),
-        # ... more pins
-    ],
-    "Display_Graphic:OLED-128O064D": [
-        (1, "input", "GND"),
-        (2, "input", "SCL"),
-        (3, "input", "SDA"),
-        (4, "input", "VCC"),
-        # ... more pins
-    ],
-    "Sensor_Motion:MPU-6050": [
-        (1, "input", "VDD"),
-        (2, "input", "GND"),
-        (3, "input", "SDA"),
-        (4, "input", "SCL"),
-        # ... more pins
-    ],
-    # Legacy mappings (for backward compatibility)
-    "MCU_ESP32_S3:ESP32-S3-WROOM-1": [
-        (1, "input", "GPIO0"),
-        (2, "input", "GPIO1"),
-        (3, "input", "GPIO2"),
-        (4, "input", "GPIO3"),
-        (5, "input", "GPIO4"),
-        (6, "input", "GPIO5"),
-        (7, "input", "GPIO6"),
-        (8, "input", "GPIO7"),
-        (9, "input", "GPIO8"),
-        (10, "input", "GPIO9"),
-        (10, "input", "GPIO10"),
-    ],
-    "Display:SSD1306": [
-        (1, "input", "GND"),
-        (2, "input", "SCL"),
-        (3, "input", "SDA"),
-        (4, "input", "VCC"),
-    ],
-}
-
-
-def get_pins_for_symbol(library_name: str, symbol_name: str) -> List[Tuple[int, str, str]]:
-    """Get pin definitions for a symbol.
-
-    Args:
-        library_name: Library name (e.g., "Device", "RF_Module")
-        symbol_name: Symbol name (e.g., "R", "LED", "ESP32-S3-WROOM-1")
-
-    Returns:
-        List of (pin_number, pin_type, pin_name) tuples
-    """
-    lib_id = f"{library_name}:{symbol_name}"
-
-    # Check if we have a predefined pin mapping
-    if lib_id in SYMBOL_PINS:
-        return SYMBOL_PINS[lib_id]
-
-    # Generic fallback for 2-pin devices
-    # This works for resistors, capacitors, LEDs, etc.
-    return [
-        (1, "passive", ""),
-        (2, "passive", "")
-    ]
-
-
-def get_kicad_standard_symbol(component_value: str) -> dict:
-    """Get KiCad standard library:symbol for a component.
-
-    This ensures compatibility with KiCad 9.0+ standard libraries.
-
-    Args:
-        component_value: Component value/name (e.g., "ESP32-S3-WROOM-1", "SSD1306")
-
-    Returns:
-        Dictionary with 'library' and 'symbol' keys
-    """
-    if component_value in KICAD_STANDARD_SYMBOLS:
-        return KICAD_STANDARD_SYMBOLS[component_value]
-
-    # Default fallback
-    return {
-        "library": "Device",
-        "symbol": component_value,
-        "pins": []
-    }
-
-
 @mcp.tool()
 async def add_wire(
     file_path: str,
@@ -356,12 +211,11 @@ async def add_component_from_library(
     symbol_name: str,
     reference: str,
     value: str,
-    footprint: str = "",
-    x: float = 100,
-    y: float = 100,
+    x: float,
+    y: float,
     unit: int = 1,
 ) -> str:
-    """Add a component from KiCad's built-in library to the schematic with footprint.
+    """Add a component from KiCad's built-in library to the schematic.
 
     Args:
         file_path: Path to the .kicad_sch file
@@ -369,7 +223,6 @@ async def add_component_from_library(
         symbol_name: Symbol name (e.g., "R", "LED", "ESP32S3-WROOM")
         reference: Component reference (e.g., "R1", "U1", "D1")
         value: Component value (e.g., "1k", "ESP32S3", "SSD1306")
-        footprint: Footprint name (e.g., "Resistor_SMD:R_0805_2012Metric")
         x: X coordinate
         y: Y coordinate
         unit: Unit number for multi-unit symbols
@@ -388,35 +241,18 @@ async def add_component_from_library(
         # Generate UUID
         comp_uuid = str(uuid.uuid4())
 
-        # Create component instance with footprint
+        # Create component instance - just reference the library, don't define the symbol
+        # KiCad will find the symbol in its built-in libraries
         lib_id = f"{library_name}:{symbol_name}"
-
-        # Get pins for this symbol
-        pins = get_pins_for_symbol(library_name, symbol_name)
-
-        # Generate pin entries
-        pin_entries = []
-        for pin_num, pin_type, pin_name in pins:
-            pin_uuid = str(uuid.uuid4())
-            pin_entries.append(f'    (pin "{pin_num}" (uuid {pin_uuid}))')
-
-        pins_str = "\n".join(pin_entries) if pin_entries else ""
-
-        # Create component entry with all required fields
-        component_entry = f'''  (symbol (lib_id "{lib_id}") (at {x} {y} 0) (unit {unit})
-  (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)
-  (uuid {comp_uuid})
-  (property "Reference" "{reference}" (at {x} {y - 5} 0)
-    (effects (font (size 1.27 1.27)))
-  )
-  (property "Value" "{value}" (at {x} {y + 2.54} 0)
-    (effects (font (size 1.27 1.27)))
-  )
-  (property "Footprint" "{footprint}" (at {x} {y + 5.08} 0)
-    (effects (font (size 1.27 1.27)) hide)
-  )
-{pins_str}
-)'''
+        component_entry = f'''  (symbol (lib_id "{lib_id}") (at {x} {y} 0) (unit {unit}) (in_bom yes) (on_board yes) (dnp no)
+    (uuid {comp_uuid})
+    (property "Reference" "{reference}" (at {x} {y} 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Value" "{value}" (at {x} {y + 2.54} 0)
+      (effects (font (size 1.27 1.27)))
+    )
+  )'''
 
         # Insert component before the closing parenthesis
         if content.rstrip().endswith(')'):
@@ -431,8 +267,6 @@ async def add_component_from_library(
         # Write back
         path.write_text(content)
 
-        footprint_info = f"\n**Footprint:** {footprint}" if footprint else "\n**Footprint:** Not specified"
-
         return f"""✅ Component added successfully!
 
 **File:** {file_path}
@@ -442,32 +276,17 @@ async def add_component_from_library(
 **Value:** {value}
 **Position:** ({x}, {y})
 **Lib ID:** {lib_id}
-**UUID:** {comp_uuid}{footprint_info}
+**UUID:** {comp_uuid}
 
-The component references the KiCad built-in library symbol with specified footprint.
+The component references the KiCad built-in library symbol. When you open this in KiCad, it will load the symbol definition from the {library_name} library.
 
-**Common Component Footprints (LCSC compatible):**
-
-**Resistors (0805 SMD):**
-- Resistor_SMD:R_0805_2012Metric
-
-**LEDs:**
-- LED_SMD:LED_0805_2012Metric
-- LED_SMD:LED_0603_1608Metric
-
-**ESP32 Modules:**
-- Module:ESP32-WROOM-32
-- Module:ESP32-WROOM-32-N16R8
-
-**OLED Displays:**
-- Display:OLED-0.91-128x32
-- Display:OLED-0.96-128x64
-
-**Buttons:**
-- Button_Switch_SMD:SW_Push_1P1T_NO_6x6mm_H9.5mm
-
-**Connectors:**
-- Connector_USB:USB_C_Plug_USB2.0-16Pin
+**Common libraries:**
+- Device: R, C, LED, Crystal
+- MCU_Microchip: ATmega328P
+- MCU_ESP32: ESP32S3-WROOM
+- Display: SSD1306
+- Switch: SW_Push
+- Connector: USB_C_Plug
 """
 
     except Exception as e:

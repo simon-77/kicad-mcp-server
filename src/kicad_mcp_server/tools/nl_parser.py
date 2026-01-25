@@ -71,20 +71,20 @@ MCU_PATTERNS = {
     r"小esp32[-_\s]?s3": "ESP32-S3-WROOM-1",
 }
 
-# Component patterns
+# Component patterns (using KiCad 9.0+ standard libraries)
 COMPONENT_PATTERNS = {
     # Display
     r"oled|ssd1306|显示": {
         "name": "SSD1306",
-        "library": "Display",
-        "symbol": "SSD1306",
+        "library": "Display_Graphic",
+        "symbol": "OLED-128O064D",
         "footprint": "Display:OLED-0.96-128x64",
         "value": "SSD1306"
     },
     r"lcd|tft": {
         "name": "LCD",
-        "library": "Display",
-        "symbol": "LCD",
+        "library": "Display_Character",
+        "symbol": "LCD_16x2",
         "footprint": "Display:LCD_1602",
         "value": "LCD1602"
     },
@@ -92,21 +92,21 @@ COMPONENT_PATTERNS = {
     # Sensors
     r"imu|mpu6050|mpu9250|陀螺仪|加速度计": {
         "name": "MPU6050",
-        "library": "Sensor",
-        "symbol": "MPU6050",
-        "footprint": "Sensor:QFN-24_4x4mm",
+        "library": "Sensor_Motion",
+        "symbol": "MPU-6050",
+        "footprint": "Sensor:QFN-24_4x4mm_P0.5mm",
         "value": "MPU6050"
     },
     r"bme280|bme680|温湿度|气压": {
         "name": "BME280",
-        "library": "Sensor",
+        "library": "Sensor_Humidity",
         "symbol": "BME280",
         "footprint": "Sensor:BME280",
         "value": "BME280"
     },
     r"dht11|dht22|温湿度传感器": {
         "name": "DHT22",
-        "library": "Sensor",
+        "library": "Sensor_Temperature",
         "symbol": "DHT22",
         "footprint": "Sensor:DHT22",
         "value": "DHT22"

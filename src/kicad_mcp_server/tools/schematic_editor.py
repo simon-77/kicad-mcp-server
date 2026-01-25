@@ -12,6 +12,31 @@ def _get_date_string() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
+# KiCad standard library symbols mapping
+# Use these library:symbol combinations for KiCad 9.0+ compatibility
+KICAD_STANDARD_SYMBOLS = {
+    "ESP32-S3-WROOM-1": {
+        "library": "RF_Module",
+        "symbol": "ESP32-S3-WROOM-1",
+        "pins": []
+    },
+    "SSD1306": {
+        "library": "Display_Graphic",
+        "symbol": "OLED-128O064D",
+        "pins": []
+    },
+    "MPU6050": {
+        "library": "Sensor_Motion",
+        "symbol": "MPU-6050",
+        "pins": []
+    },
+    "ESP32-WROOM-32": {
+        "library": "RF_Module",
+        "symbol": "ESP32-WROOM-32",
+        "pins": []
+    },
+}
+
 # Pin definitions for common symbols
 SYMBOL_PINS = {
     "Device:R": [
@@ -35,6 +60,35 @@ SYMBOL_PINS = {
         (1, "passive", ""),
         (2, "passive", "")
     ],
+    # KiCad standard library symbols
+    "RF_Module:ESP32-S3-WROOM-1": [
+        (1, "input", "GPIO0"),
+        (2, "input", "GPIO1"),
+        (3, "input", "GPIO2"),
+        (4, "input", "GPIO3"),
+        (5, "input", "GPIO4"),
+        (6, "input", "GPIO5"),
+        (7, "input", "GPIO6"),
+        (8, "input", "GPIO7"),
+        (9, "input", "GPIO8"),
+        (10, "input", "GPIO9"),
+        # ... more pins
+    ],
+    "Display_Graphic:OLED-128O064D": [
+        (1, "input", "GND"),
+        (2, "input", "SCL"),
+        (3, "input", "SDA"),
+        (4, "input", "VCC"),
+        # ... more pins
+    ],
+    "Sensor_Motion:MPU-6050": [
+        (1, "input", "VDD"),
+        (2, "input", "GND"),
+        (3, "input", "SDA"),
+        (4, "input", "SCL"),
+        # ... more pins
+    ],
+    # Legacy mappings (for backward compatibility)
     "MCU_ESP32_S3:ESP32-S3-WROOM-1": [
         (1, "input", "GPIO0"),
         (2, "input", "GPIO1"),
@@ -42,19 +96,17 @@ SYMBOL_PINS = {
         (4, "input", "GPIO3"),
         (5, "input", "GPIO4"),
         (6, "input", "GPIO5"),
-        (6, "input", "GPIO6"),
-        (7, "input", "GPIO7"),
-        (8, "input", "GPIO8"),
-        (9, "input", "GPIO9"),
+        (7, "input", "GPIO6"),
+        (8, "input", "GPIO7"),
+        (9, "input", "GPIO8"),
+        (10, "input", "GPIO9"),
         (10, "input", "GPIO10"),
-        # ... more pins
     ],
     "Display:SSD1306": [
         (1, "input", "GND"),
         (2, "input", "SCL"),
         (3, "input", "SDA"),
         (4, "input", "VCC"),
-        # ... more pins
     ],
 }
 
@@ -63,7 +115,7 @@ def get_pins_for_symbol(library_name: str, symbol_name: str) -> List[Tuple[int, 
     """Get pin definitions for a symbol.
 
     Args:
-        library_name: Library name (e.g., "Device", "MCU_ESP32_S3")
+        library_name: Library name (e.g., "Device", "RF_Module")
         symbol_name: Symbol name (e.g., "R", "LED", "ESP32-S3-WROOM-1")
 
     Returns:
@@ -81,6 +133,28 @@ def get_pins_for_symbol(library_name: str, symbol_name: str) -> List[Tuple[int, 
         (1, "passive", ""),
         (2, "passive", "")
     ]
+
+
+def get_kicad_standard_symbol(component_value: str) -> dict:
+    """Get KiCad standard library:symbol for a component.
+
+    This ensures compatibility with KiCad 9.0+ standard libraries.
+
+    Args:
+        component_value: Component value/name (e.g., "ESP32-S3-WROOM-1", "SSD1306")
+
+    Returns:
+        Dictionary with 'library' and 'symbol' keys
+    """
+    if component_value in KICAD_STANDARD_SYMBOLS:
+        return KICAD_STANDARD_SYMBOLS[component_value]
+
+    # Default fallback
+    return {
+        "library": "Device",
+        "symbol": component_value,
+        "pins": []
+    }
 
 
 @mcp.tool()

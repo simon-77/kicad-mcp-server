@@ -211,11 +211,12 @@ async def add_component_from_library(
     symbol_name: str,
     reference: str,
     value: str,
-    x: float,
-    y: float,
+    footprint: str = "",
+    x: float = 100,
+    y: float = 100,
     unit: int = 1,
 ) -> str:
-    """Add a component from KiCad's built-in library to the schematic.
+    """Add a component from KiCad's built-in library to the schematic with footprint.
 
     Args:
         file_path: Path to the .kicad_sch file
@@ -223,6 +224,7 @@ async def add_component_from_library(
         symbol_name: Symbol name (e.g., "R", "LED", "ESP32S3-WROOM")
         reference: Component reference (e.g., "R1", "U1", "D1")
         value: Component value (e.g., "1k", "ESP32S3", "SSD1306")
+        footprint: Footprint name (e.g., "Resistor_SMD:R_0805_2012Metric")
         x: X coordinate
         y: Y coordinate
         unit: Unit number for multi-unit symbols
@@ -241,10 +243,25 @@ async def add_component_from_library(
         # Generate UUID
         comp_uuid = str(uuid.uuid4())
 
-        # Create component instance - just reference the library, don't define the symbol
-        # KiCad will find the symbol in its built-in libraries
+        # Create component instance with footprint
         lib_id = f"{library_name}:{symbol_name}"
-        component_entry = f'''  (symbol (lib_id "{lib_id}") (at {x} {y} 0) (unit {unit}) (in_bom yes) (on_board yes) (dnp no)
+
+        # Add footprint property if provided
+        if footprint:
+            component_entry = f'''  (symbol (lib_id "{lib_id}") (at {x} {y} 0) (unit {unit}) (in_bom yes) (on_board yes) (dnp no)
+    (uuid {comp_uuid})
+    (property "Reference" "{reference}" (at {x} {y} 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Value" "{value}" (at {x} {y + 2.54} 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" "{footprint}" (at {x} {y + 5.08} 0)
+      (effects (font (size 1.27 1.27)) (justify left) hide)
+    )
+  )'''
+        else:
+            component_entry = f'''  (symbol (lib_id "{lib_id}") (at {x} {y} 0) (unit {unit}) (in_bom yes) (on_board yes) (dnp no)
     (uuid {comp_uuid})
     (property "Reference" "{reference}" (at {x} {y} 0)
       (effects (font (size 1.27 1.27)))
@@ -267,6 +284,8 @@ async def add_component_from_library(
         # Write back
         path.write_text(content)
 
+        footprint_info = f"\n**Footprint:** {footprint}" if footprint else "\n**Footprint:** Not specified"
+
         return f"""✅ Component added successfully!
 
 **File:** {file_path}
@@ -276,17 +295,32 @@ async def add_component_from_library(
 **Value:** {value}
 **Position:** ({x}, {y})
 **Lib ID:** {lib_id}
-**UUID:** {comp_uuid}
+**UUID:** {comp_uuid}{footprint_info}
 
-The component references the KiCad built-in library symbol. When you open this in KiCad, it will load the symbol definition from the {library_name} library.
+The component references the KiCad built-in library symbol with specified footprint.
 
-**Common libraries:**
-- Device: R, C, LED, Crystal
-- MCU_Microchip: ATmega328P
-- MCU_ESP32: ESP32S3-WROOM
-- Display: SSD1306
-- Switch: SW_Push
-- Connector: USB_C_Plug
+**Common Component Footprints (LCSC compatible):**
+
+**Resistors (0805 SMD):**
+- Resistor_SMD:R_0805_2012Metric
+
+**LEDs:**
+- LED_SMD:LED_0805_2012Metric
+- LED_SMD:LED_0603_1608Metric
+
+**ESP32 Modules:**
+- Module:ESP32-WROOM-32
+- Module:ESP32-WROOM-32-N16R8
+
+**OLED Displays:**
+- Display:OLED-0.91-128x32
+- Display:OLED-0.96-128x64
+
+**Buttons:**
+- Button_Switch_SMD:SW_Push_1P1T_NO_6x6mm_H9.5mm
+
+**Connectors:**
+- Connector_USB:USB_C_Plug_USB2.0-16Pin
 """
 
     except Exception as e:

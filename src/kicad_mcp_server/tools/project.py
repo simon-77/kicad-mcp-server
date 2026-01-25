@@ -64,7 +64,7 @@ async def create_kicad_project(
             json.dump(kicad_pro, f, indent=2)
 
         # ===== 2. Create schematic file (KiCad 9.0 format) =====
-        # Create example components with proper placement
+        # Create example components with proper placement and footprints
         led_uuid = str(uuid.uuid4())
         r1_uuid = str(uuid.uuid4())
 
@@ -133,6 +133,9 @@ async def create_kicad_project(
     (property "Value" "330" (at 100 50 0)
       (effects (font (size 1.27 1.27)))
     )
+    (property "Footprint" "Resistor_SMD:R_0805_2012Metric" (at 100 52.54 0)
+      (effects (font (size 1.27 1.27)) (justify left) hide)
+    )
   )
 
   (symbol (lib_id "Device:LED") (at 120 50 0) (unit 1) (in_bom yes) (on_board yes) (dnp no)
@@ -142,6 +145,9 @@ async def create_kicad_project(
     )
     (property "Value" "LED_RED" (at 120 50 0)
       (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" "LED_SMD:LED_0805_2012Metric" (at 120 52.54 0)
+      (effects (font (size 1.27 1.27)) (justify left) hide)
     )
   )
 

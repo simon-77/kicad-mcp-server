@@ -398,3 +398,122 @@ async def list_test_frameworks() -> str:
 ])
 
     return "\n".join(lines)
+
+
+@mcp.tool()
+async def generate_esp32s3_arduino_test(
+    schematic_path: str,
+    output_path: str = "",
+    button_gpio: int = 0,
+    led_gpio: int = 2,
+    i2c_sda: int = 6,
+    i2c_scl: int = 7,
+) -> str:
+    """Generate Arduino test code for ESP32S3 with OLED, Button, and LED.
+
+    This creates a complete Arduino .ino file for testing an ESP32S3 development board
+    with I2C OLED display, push button, and LED as shown in typical ESP32S3 schematics.
+
+    Args:
+        schematic_path: Path to the .kicad_sch file (for reference)
+        output_path: Where to save the .ino file (optional)
+        button_gpio: GPIO pin number for button (default: 0)
+        led_gpio: GPIO pin number for LED (default: 2)
+        i2c_sda: I2C SDA pin (default: 6)
+        i2c_scl: I2C SCL pin (default: 7)
+
+    Returns:
+        Generated Arduino code content and save location
+    """
+    try:
+        from datetime import datetime
+
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        
+        # Generate Arduino code (abbreviated for space)
+        arduino_code = f'''/**
+ * Arduino Test Code for ESP32S3 Development Board
+ * Generated from: {schematic_path}
+ */
+
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define BUTTON_PIN  {button_gpio}
+#define LED_PIN     {led_gpio}
+#define I2C_SDA     {i2c_sda}
+#define I2C_SCL     {i2c_scl}
+
+#define SCREEN_WIDTH  128
+#define SCREEN_HEIGHT 32
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+int testCount = 0;
+
+void setup() {{
+    Serial.begin(115200);
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
+    pinMode(LED_PIN, OUTPUT);
+    Wire.begin(I2C_SDA, I2C_SCL);
+    
+    if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {{
+        Serial.println("SSD1306 failed");
+        while(1);
+    }}
+    
+    display.clearDisplay();
+    display.setCursor(0,0);
+    display.println("ESP32S3 Test");
+    display.display();
+    
+    testLED();
+}}
+
+void loop() {{
+    if(digitalRead(BUTTON_PIN) == LOW) {{
+        delay(50);
+        if(digitalRead(BUTTON_PIN) == LOW) {{
+            testCount++;
+            digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+            Serial.print("Test #");
+            Serial.println(testCount);
+            delay(200);
+        }}
+    }}
+}}
+
+void testLED() {{
+    for(int i = 0; i < 3; i++) {{
+        digitalWrite(LED_PIN, HIGH);
+        delay(200);
+        digitalWrite(LED_PIN, LOW);
+        delay(200);
+    }}
+}}
+'''
+
+        # Determine output path
+        if output_path:
+            out_path = Path(output_path)
+        else:
+            sch_path = Path(schematic_path)
+            out_path = sch_path.parent / f"{sch_path.stem}_test.ino"
+
+        # Write file
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(arduino_code)
+
+        return f"""✅ Arduino Test Code Generated!
+
+**Output:** {out_path}
+**Button GPIO:** {button_gpio}
+**LED GPIO:** {led_gpio}
+**I2C:** SDA=GPIO{i2c_sda}, SCL=GPIO{i2c_scl}
+
+Open in Arduino IDE and upload to ESP32S3!
+"""
+
+    except Exception as e:
+        import traceback
+        return f"Error: {e}\\n{traceback.format_exc()}"

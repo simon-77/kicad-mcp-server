@@ -23,10 +23,14 @@ mcp = FastMCP(
 
 # Import and register tools
 from .tools import (
+    project,
     schematic,
+    schematic_editor,
     pcb,
+    pcb_layout,
+    arduino_codegen,
+    components,
     summary,
-    testgen,
 )
 
 # Resources

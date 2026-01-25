@@ -12,6 +12,7 @@ from . import (
     testgen,
     drc,
     components,
+    editor,
 )
 
-__all__ = ["schematic", "pcb", "summary", "testgen", "drc", "components"]
+__all__ = ["schematic", "pcb", "summary", "testgen", "drc", "components", "editor"]

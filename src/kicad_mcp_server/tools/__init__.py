@@ -22,6 +22,7 @@ from . import (
     arduino_codegen,
     nl_parser,
     pcb_layout,
+    auto_router,
 )
 
-__all__ = ["schematic", "pcb", "summary", "testgen", "drc", "components", "editor", "pcb_editor", "project", "schematic_editor", "footprint_library", "validation", "e2e_test", "arduino_codegen", "nl_parser", "pcb_layout"]
+__all__ = ["schematic", "pcb", "summary", "testgen", "drc", "components", "editor", "pcb_editor", "project", "schematic_editor", "footprint_library", "validation", "e2e_test", "arduino_codegen", "nl_parser", "pcb_layout", "auto_router"]

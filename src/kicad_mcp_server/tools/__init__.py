@@ -13,6 +13,7 @@ from . import (
     drc,
     components,
     editor,
+    pcb_editor,
 )
 
-__all__ = ["schematic", "pcb", "summary", "testgen", "drc", "components", "editor"]
+__all__ = ["schematic", "pcb", "summary", "testgen", "drc", "components", "editor", "pcb_editor"]

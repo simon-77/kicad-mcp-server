@@ -471,8 +471,11 @@ async def add_zone(
         import uuid
         zone_uuid = str(uuid.uuid4())
 
+        # Handle zone name
+        zname = zone_name if zone_name else ""
+
         # Generate zone instance
-        zone_instance = f'''  (zone (net {net}) (net_name {zone_name or "\"\""})
+        zone_instance = f'''  (zone (net {net}) (net_name "{zname}")
     (layer "{layer}")
     (tstamp {zone_uuid})
     (hatch edge 0.508)

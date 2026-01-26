@@ -74,3 +74,6 @@ test_*.py
 # Temporary documentation
 SELF_VALIDATION_SUMMARY.md
 IMPLEMENTATION_*.md
+
+# MCP builder temporary files
+mcp-builder/

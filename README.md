@@ -48,7 +48,7 @@ Parse KiCad XML netlist files for 100% accurate pin-level connection tracking:
 - Includes all connections (explicit and implicit)
 - Bidirectional queries (component <-> network)
 
-### Schematic Editing
+### Schematic Editing (Experimental)
 
 Create and modify KiCad schematics:
 
@@ -57,9 +57,8 @@ Create and modify KiCad schematics:
 - `add_wire()` - Add wire connections
 - `add_global_label()` - Add global labels
 - `add_label()` - Add local labels
-- `setup_pcb_layout()` - Initialize PCB layout
 
-### PCB Layout
+### PCB Layout (Experimental)
 
 PCB layout and editing:
 
@@ -75,6 +74,64 @@ KiCad project creation and management:
 
 - `create_kicad_project()` - Create new project from template
 - `copy_kicad_project()` - Copy existing project
+
+## Limitations and Recommendations
+
+### Current Status
+
+**Analysis Tools (Production-Ready)**
+- Schematic analysis: Fully functional
+- PCB analysis: Fully functional (uses official pcbnew API)
+- Netlist analysis: 100% accurate, recommended for connection tracing
+
+**Editing Tools (Experimental)**
+- Schematic editing: Basic functionality, has limitations
+- PCB layout: Basic functionality, has limitations
+
+### Known Limitations
+
+**Schematic Editing:**
+- Components are added with minimal pin definitions
+- Wire connections may not form proper electrical connections
+- Symbol placement may not be visually aligned
+- **Recommendation**: Use KiCad GUI for actual schematic editing
+
+**PCB Layout:**
+- Basic initialization only
+- No automatic placement or routing
+- **Recommendation**: Use KiCad GUI for PCB layout
+
+### Recommended Workflow
+
+```
+1. Create Project (MCP or KiCad GUI)
+   ↓
+2. Edit Schematic in KiCad GUI
+   - Add components
+   - Wire connections
+   - Design validation
+   ↓
+3. Export Netlist (KiCad CLI)
+   kicad-cli sch export netlist --format kicadxml
+   ↓
+4. Analyze Design (MCP Server)
+   - Trace connections (netlist-based)
+   - List components
+   - Verify topology
+   ↓
+5. Analyze PCB (MCP Server)
+   - Check footprints
+   - Verify tracks
+   - Get statistics
+```
+
+### Future Improvements
+
+The editing tools are currently experimental and will be improved in future releases. For now, we recommend:
+
+- Use KiCad GUI for all design and editing work
+- Use MCP server for analysis and verification
+- Use netlist export for accurate connection tracing
 
 ## Installation
 
@@ -246,20 +303,60 @@ The server is organized into 6 modules:
 
 ## Documentation
 
-- **NETLIST_GUIDE.md** - Complete guide to netlist-based connection tracing
-- **KICAD_API_MIGRATION.md** - KiCad API migration notes
-- **ROADMAP.md** - Project roadmap
+- **README.md** - This file (user guide)
 - **CLAUDE.md** - Development documentation
 
 ## Design Decisions
 
 ### Scope
 
-The server focuses on three core capabilities:
+The server focuses on analysis and project management:
 
-1. **Analysis** - Understand existing designs
-2. **Editing** - Create and modify designs
-3. **Management** - Project organization
+1. **Analysis** - Understand existing designs (Production-Ready)
+2. **Project Management** - Create and organize projects (Production-Ready)
+3. **Editing** - Basic schematic/PCB editing (Experimental)
+
+### Technical Limitations
+
+**Why Editing Tools Are Experimental:**
+
+KiCad 9.0 does not provide Python APIs for schematic editing:
+
+- **PCB**: Has official `pcbnew` API (fully functional)
+- **Schematic**: No Python API available (manual S-expression parsing required)
+- **Netlist**: Can export via CLI, but cannot import via API
+
+**Schematic Editing Challenges:**
+
+1. **Complex S-expression Format**
+   - KiCad schematics use nested Lisp-like expressions
+   - Requires precise UUID generation for all elements
+   - Pin definitions need exact positions and electrical types
+
+2. **Symbol Instantiation**
+   - Must reference library symbols correctly
+   - Requires proper pin mapping and units
+   - Visual alignment is difficult without GUI
+
+3. **Electrical Connections**
+   - Wires must connect to exact pin coordinates
+   - Junctions and labels need proper formatting
+   - Power symbols have special handling
+
+**Current Approach:**
+
+```python
+# Simplified component addition (experimental)
+component_entry = f'''
+  (symbol (lib_id "{lib_id}") (at {x} {y} 0)
+    (exclude_from_sim no)
+    (uuid {uuid})
+    (pins...)  # Minimal pin definitions
+  )
+'''
+```
+
+**Result**: Components are added but may lack complete electrical information.
 
 ### Out of Scope
 
@@ -269,6 +366,29 @@ The following features are intentionally not included:
 - Natural language processing (use AI assistant directly)
 - Component library management (use KiCad built-in libraries)
 - Auto-routing (use KiCad's built-in router)
+- Complete schematic editing (use KiCad GUI instead)
+
+### Recommended Usage
+
+**For Best Results:**
+
+1. **Design Phase**: Use KiCad GUI for all schematic and PCB editing
+2. **Analysis Phase**: Use MCP server to analyze and verify designs
+3. **Connection Tracing**: Export netlist and use MCP netlist tools
+4. **Automation**: Use MCP for bulk analysis and reporting
+
+**MCP Server Excels At:**
+- Analyzing existing schematics
+- Tracing connections (netlist-based)
+- Listing components and footprints
+- PCB statistics and verification
+- Project organization
+
+**KiCad GUI Excels At:**
+- Schematic design and editing
+- PCB layout and routing
+- Visual design verification
+- Interactive component placement
 
 ### Optimization Results
 
@@ -277,6 +397,8 @@ The following features are intentionally not included:
 | Number of tools | 10 | 6 | -40% |
 | Lines of code | ~3500 | ~2250 | -36% |
 | Focus | Distributed | Core | Improved |
+| Analysis tools | Basic | Production-Ready | ✅ |
+| Editing tools | Ambitious | Experimental | ⚠️ |
 
 ## Resources
 

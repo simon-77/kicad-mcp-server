@@ -616,7 +616,7 @@ class SchematicParser:
         all_labels = h_labels + g_labels
 
         # Start from component position and trace
-        max_tolerance = 8.0  # 8mm max tolerance (for larger components like resistors)
+        max_tolerance = 20.0  # 20mm max tolerance (for components with pin offset)
         start_point = None
         min_dist = float('inf')
 
@@ -668,6 +668,20 @@ class SchematicParser:
                 for neighbor in network[point]:
                     if neighbor not in visited:
                         queue.append(neighbor)
+
+        # Find nearby power symbols
+        power_tolerance = 15.0  # 15mm tolerance for power symbols
+        power_pattern = r'\(symbol\s+\(lib_id\s+"power:([^"]+)"[\s\S]*?\(at\s+([\d.]+)\s+([\d.]+)'
+        for match in re.finditer(power_pattern, content):
+            power_name = match.group(1)
+            px, py = float(match.group(2)), float(match.group(3))
+            dist = ((px - cx)**2 + (py - cy)**2)**0.5
+            if dist < power_tolerance:
+                connected_labels.append({
+                    "name": f"POWER:{power_name}",
+                    "position": (px, py),
+                    "distance": dist,
+                })
 
         return {
             "component": reference,

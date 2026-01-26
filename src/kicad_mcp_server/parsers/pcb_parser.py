@@ -21,8 +21,8 @@ class PCBFootprint:
     pad_count: int = 0
 
     @classmethod
-    def from_kicad_skip(cls, data: dict[str, Any]) -> "PCBFootprint":
-        """Create from kicad-skip data structure."""
+    def from_dict(cls, data: dict[str, Any]) -> "PCBFootprint":
+        """Create from parsed data structure."""
         at = data.get("at", {})
         position = (float(at.get("x", 0)), float(at.get("y", 0)))
         rotation = float(at.get("rotation", 0))
@@ -63,8 +63,6 @@ class PCBParser:
         if self._data is not None:
             return self._data
 
-        import re
-
         content = self.file_path.read_text()
 
         # Extract basic information
@@ -99,33 +97,83 @@ class PCBParser:
         return general
 
     def _parse_footprints(self, content: str) -> list[dict[str, Any]]:
-        """Parse footprints from PCB."""
+        """Parse footprints from PCB.
+
+        Uses multi-line regex to match KiCad footprint instances.
+        """
         footprints = []
 
-        # Pattern: (footprint "library:footprint" ... (reference "J1") ... (value "conn") ...)
-        footprint_pattern = r'\(footprint\s+"([^"]+)"[^)]*\(reference\s+"([^"]+)"[^)]*\(value\s+"([^"]+)"[^)]*\(layer\s+"([^"]+)"[^)]*\(at\s+([\d.]+)\s+([\d.]+)(?:\s+([\d.]+))?'
+        # Simpler pattern: Match (footprint "..." followed by (at ... sometime later)
+        # We'll find the footprint line, then search forward for the (at ...) line
+        footprint_lines_pattern = r'\(footprint\s+"([^"]+)"'
 
-        for match in re.finditer(footprint_pattern, content, re.DOTALL):
+        for match in re.finditer(footprint_lines_pattern, content):
             footprint_id = match.group(1)
-            reference = match.group(2)
-            value = match.group(3)
-            layer = match.group(4)
-            x = float(match.group(5))
-            y = float(match.group(6))
-            rotation = float(match.group(7)) if match.group(7) else 0.0
+            start_pos = match.start()
 
-            # Count pads in this footprint
-            pad_pattern = rf'\(footprint\s+"[^"]*"[^)]*\(reference\s+"{reference}"[^)]*?\(pad\s+'
-            pad_count = len(re.findall(pad_pattern, content[:content.find(match.group(0)) + 1000]))
+            # Search forward for the (at ...) line, within a reasonable distance
+            search_area = content[start_pos:start_pos + 500]
+            at_match = re.search(r'\(at\s+([\d.]+)\s+([\d.]+)(?:\s+([\d.\-]+))?\)', search_area)
 
-            footprints.append({
-                "footprint_id": footprint_id,
-                "reference": reference,
-                "value": value,
-                "layer": layer,
-                "at": {"x": x, "y": y, "rotation": rotation},
-                "pads": [],
-            })
+            if at_match:
+                x = float(at_match.group(1))
+                y = float(at_match.group(2))
+                rotation = float(at_match.group(3)) if at_match.group(3) else 0.0
+
+                # Extract a larger block for reference and value
+                # Find the matching closing parenthesis for the footprint
+                depth = 0
+                found_open = False
+                end_pos = start_pos
+                block_start = start_pos
+
+                # Find where the (footprint block starts (first '(' after the keyword)
+                while end_pos < len(content) and end_pos < start_pos + 20:
+                    if content[end_pos] == '(':
+                        found_open = True
+                        block_start = end_pos
+                        break
+                    end_pos += 1
+
+                if found_open:
+                    # Now find the matching closing parenthesis
+                    depth = 1
+                    end_pos = block_start + 1
+                    while end_pos < len(content):
+                        if content[end_pos] == '(':
+                            depth += 1
+                        elif content[end_pos] == ')':
+                            depth -= 1
+                            if depth == 0:
+                                break
+                        end_pos += 1
+
+                    footprint_block = content[block_start:end_pos]
+
+                    # Extract reference from fp_text
+                    ref_match = re.search(r'\(fp_text\s+reference\s+"([^"]+)"', footprint_block)
+                    reference = ref_match.group(1) if ref_match else ""
+
+                    # Extract value from fp_text
+                    val_match = re.search(r'\(fp_text\s+value\s+"([^"]+)"', footprint_block)
+                    value = val_match.group(1) if val_match else ""
+
+                    # Extract layer (default to F.Cu if not found)
+                    layer_match = re.search(r'\(layer\s+"([^"]+)"', footprint_block)
+                    layer = layer_match.group(1) if layer_match else "F.Cu"
+
+                    # Count pads
+                    pad_count = len(re.findall(r'\(pad\s+', footprint_block))
+
+                    footprints.append({
+                        "footprint_id": footprint_id,
+                        "reference": reference,
+                        "value": value,
+                        "layer": layer,
+                        "at": {"x": x, "y": y, "rotation": rotation},
+                        "pads": [],
+                        "pad_count": pad_count,
+                    })
 
         return footprints
 
@@ -206,7 +254,7 @@ class PCBParser:
             List of footprints
         """
         data = self._parse_file()
-        return [PCBFootprint.from_kicad_skip(f) for f in data["footprints"]]
+        return [PCBFootprint.from_dict(f) for f in data["footprints"]]
 
     def get_statistics(self) -> dict[str, Any]:
         """Get PCB statistics.
@@ -216,21 +264,26 @@ class PCBParser:
         """
         data = self._parse_file()
 
-        # Calculate board dimensions
+        # Calculate board dimensions from footprint positions
         footprints = self.get_footprints()
         if footprints:
             x_coords = [f.position[0] for f in footprints]
             y_coords = [f.position[1] for f in footprints]
             min_x, max_x = min(x_coords), max(x_coords)
             min_y, max_y = min(y_coords), max(y_coords)
-            width = max_x - min_x + 10  # Add margin
-            height = max_y - min_y + 10
+            # Add margin for board edge
+            margin = 5.0
+            width = max_x - min_x + (2 * margin)
+            height = max_y - min_y + (2 * margin)
         else:
             width = height = 0.0
 
+        # Calculate total pads from pad_count field
+        total_pads = sum(f.get("pad_count", 0) for f in data["footprints"])
+
         return {
             "total_footprints": len(data["footprints"]),
-            "total_pads": sum(len(f.get("pads", [])) for f in data["footprints"]),
+            "total_pads": total_pads,
             "total_tracks": len(data["tracks"]),
             "total_vias": len(data["vias"]),
             "total_zones": len(data["zones"]),

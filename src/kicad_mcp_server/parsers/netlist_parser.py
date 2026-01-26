@@ -63,32 +63,24 @@ class NetlistParser:
         tree = ET.parse(self.file_path)
         root = tree.getroot()
 
-        # Parse components
+        # Parse components (KiCad 9.0 uses <comp> not <component>)
         components = {}
-        for comp in root.findall(".//component"):
+        for comp in root.findall(".//comp"):
             ref = comp.get("ref")
             value = comp.findtext("value", "")
             library = comp.findtext("libsource/libpart", "")
             footprint = comp.findtext("footprint/libpart", "")
 
-            pins = {}
-            for pin in comp.findall(".//pin"):
-                pin_num = pin.get("num")
-                pin_net = pin.get("net")
-                if pin_num and pin_net:
-                    # Extract net name from net code
-                    net_name = self._get_net_name(root, pin_net)
-                    pins[pin_num] = net_name
-
+            # Pins will be populated from nets later
             components[ref] = NetlistComponent(
                 reference=ref,
                 value=value,
                 library=library,
                 footprint=footprint,
-                pins=pins,
+                pins={},  # Empty initially, will populate from nets
             )
 
-        # Parse nets
+        # Parse nets and populate component pins
         nets = {}
         for net in root.findall(".//net"):
             code = int(net.get("code"))
@@ -100,6 +92,10 @@ class NetlistParser:
                 pin_num = node.get("pin")
                 if ref and pin_num:
                     pins_list.append((ref, pin_num))
+
+                    # Populate component pins
+                    if ref in components:
+                        components[ref].pins[pin_num] = name
 
             nets[name] = NetlistNet(name=name, code=code, pins=pins_list)
 

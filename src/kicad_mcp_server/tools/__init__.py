@@ -1,6 +1,6 @@
 """KiCad MCP Server Tools
 
-Core KiCad operations - no business logic, only low-level APIs.
+Core KiCad operations - simplified and focused.
 """
 
 from . import (
@@ -9,9 +9,7 @@ from . import (
     schematic_editor,
     pcb,
     pcb_layout,
-    arduino_codegen,
-    components,
-    summary,
+    netlist,
 )
 
 __all__ = [
@@ -20,7 +18,5 @@ __all__ = [
     "schematic_editor",
     "pcb",
     "pcb_layout",
-    "arduino_codegen",
-    "components",
-    "summary",
+    "netlist",
 ]

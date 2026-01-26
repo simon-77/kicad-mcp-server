@@ -59,6 +59,8 @@ class SchematicNet:
     code: int
     node_count: int = 0
     pins: list[str] = field(default_factory=list)
+    type: str = "unknown"
+    position: tuple[float, float] = (0.0, 0.0)
 
     @classmethod
     def from_kicad_skip(cls, data: dict[str, Any]) -> "SchematicNet":
@@ -66,6 +68,8 @@ class SchematicNet:
         return cls(
             name=data.get("name", ""),
             code=data.get("code", 0),
+            type=data.get("type", "unknown"),
+            position=data.get("position", (0.0, 0.0)),
         )
 
 
@@ -165,49 +169,136 @@ class SchematicParser:
         components = []
 
         # Find all symbol instances
-        # Pattern: (symbol (lib_id ...) (property "Reference" "R1") ...)
-        # Use [\s\S]*? to match across newlines (non-greedy)
-        symbol_pattern = r'\(symbol[\s\S]*?lib_id\s+"([^"]+)"[\s\S]*?\(property\s+"Reference"\s+"([^"]+)"[\s\S]*?\(property\s+"Value"\s+"([^"]+)"'
+        # Pattern: (symbol (at x y rotation) (lib_id "...") ... (property "Reference" "...") ...)
+        # Match from (symbol to the closing )
+        lines = content.split('\n')
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            if line.startswith('(symbol') and not line.startswith('(symbol "'):
+                # Found a symbol instance, find the entire block
+                symbol_block = []
+                depth = 0
+                j = i
+                while j < len(lines):
+                    current_line = lines[j]
+                    # Count parentheses
+                    depth += current_line.count('(') - current_line.count(')')
+                    symbol_block.append(current_line)
+                    if depth == 0 and len(symbol_block) > 1:
+                        break
+                    j += 1
+                    if j - i > 200:  # Safety limit
+                        break
 
-        for match in re.finditer(symbol_pattern, content, re.DOTALL):
-            lib_id = match.group(1)
-            reference = match.group(2)
-            value = match.group(3)
+                block_text = '\n'.join(symbol_block)
 
-            # Build properties in the format expected by from_kicad_skip
-            properties = [
-                {"key": "Reference", "value": reference},
-                {"key": "Value", "value": value},
-            ]
+                # Extract lib_id
+                lib_id_match = re.search(r'\(lib_id\s+"([^"]+)"', block_text)
+                if not lib_id_match:
+                    i = j + 1
+                    continue
 
-            components.append({
-                "lib_id": lib_id,
-                "reference": reference,
-                "value": value,
-                "properties": properties,
-                "pins": [],
-            })
+                lib_id = lib_id_match.group(1)
+
+                # Extract position (at x y rotation)
+                at_match = re.search(r'^\s*\(at\s+([\d.]+)\s+([\d.]+)\s+(\d+)\)', block_text, re.MULTILINE)
+                if at_match:
+                    x = float(at_match.group(1))
+                    y = float(at_match.group(2))
+                    rotation = float(at_match.group(3))
+                else:
+                    x, y, rotation = 0.0, 0.0, 0.0
+
+                # Extract reference
+                ref_match = re.search(r'\(property\s+"Reference"\s+"([^"]+)"', block_text)
+                reference = ref_match.group(1) if ref_match else ""
+
+                # Extract value
+                value_match = re.search(r'\(property\s+"Value"\s+"([^"]+)"', block_text)
+                value = value_match.group(1) if value_match else ""
+
+                # Extract footprint
+                fp_match = re.search(r'\(property\s+"Footprint"\s+"([^"]+)"', block_text)
+                footprint = fp_match.group(1) if fp_match else None
+
+                # Extract pins
+                pins = []
+                for pin_match in re.finditer(r'\(pin\s+"(\d+)"', block_text):
+                    pins.append({"number": pin_match.group(1)})
+
+                # Skip library symbols (no reference)
+                if reference and not reference.startswith('#'):
+                    # Build properties
+                    properties = [
+                        {"key": "Reference", "value": reference},
+                        {"key": "Value", "value": value},
+                    ]
+                    if footprint:
+                        properties.append({"key": "Footprint", "value": footprint})
+
+                    components.append({
+                        "lib_id": lib_id,
+                        "reference": reference,
+                        "value": value,
+                        "properties": properties,
+                        "at": {"x": x, "y": y},
+                        "pins": pins,
+                    })
+
+                i = j + 1
+            else:
+                i += 1
 
         return components
 
     def _parse_nets(self, content: str) -> list[dict[str, Any]]:
         """Parse nets from schematic."""
-        nets = []
+        nets = {}
 
-        # Find net segments
-        # Pattern: (net (code 1) (name "GND") ...)
-        net_pattern = r'\(net\s+\(code\s+(\d+)\)\s*\(name\s+"([^"]+)"\)'
-
-        for match in re.finditer(net_pattern, content):
-            code = int(match.group(1))
-            name = match.group(2)
-
-            nets.append({
-                "code": code,
+        # KiCad 9.0 uses global_label, label, and wire to define nets
+        # Extract global labels
+        global_label_pattern = r'\(global_label\s+"([^"]+)"[\s\S]*?\(at\s+([\d.]+)\s+([\d.]+)[^\)]*\)'
+        for match in re.finditer(global_label_pattern, content):
+            name = match.group(1)
+            x = float(match.group(2))
+            y = float(match.group(3))
+            nets[name] = {
                 "name": name,
-            })
+                "code": len(nets),
+                "type": "global",
+                "position": (x, y),
+            }
 
-        return nets
+        # Extract local labels
+        label_pattern = r'\(label\s+"([^"]+)"[\s\S]*?\(at\s+([\d.]+)\s+([\d.]+)[^\)]*\)'
+        for match in re.finditer(label_pattern, content):
+            name = match.group(1)
+            if name not in nets:  # Avoid duplicates
+                x = float(match.group(2))
+                y = float(match.group(3))
+                nets[name] = {
+                    "name": name,
+                    "code": len(nets),
+                    "type": "local",
+                    "position": (x, y),
+                }
+
+        # Extract power port labels (like +3V3, GND, etc.)
+        power_pattern = r'\(symbol\s+\(lib_id\s+"power:([^"]+)"[\s\S]*?\(at\s+([\d.]+)\s+([\d.]+)'
+        for match in re.finditer(power_pattern, content):
+            name = match.group(1)
+            if name not in nets:  # Avoid duplicates
+                x = float(match.group(2))
+                y = float(match.group(3))
+                nets[name] = {
+                    "name": name,
+                    "code": len(nets),
+                    "type": "power",
+                    "position": (x, y),
+                }
+
+        return list(nets.values())
 
     def _parse_sheets(self, content: str) -> list[dict[str, str]]:
         """Parse hierarchical sheets."""
@@ -297,3 +388,290 @@ class SchematicParser:
                 results.append(component)
 
         return results
+
+    def get_component_connections(self, reference: str) -> dict[str, Any]:
+        """Get all network connections for a component.
+
+        Args:
+            reference: Component reference (e.g., "R16")
+
+        Returns:
+            Dictionary with connection information:
+            {
+                "nets": ["net_name1", "net_name2"],
+                "labels": ["label1", "label2"],
+                "connected_components": ["comp1", "comp2"]
+            }
+        """
+        content = self.file_path.read_text()
+
+        # Find the component instance
+        comp_pattern = rf'\(symbol\s+[\s\S]*?\(property\s+"Reference"\s+"{re.escape(reference)}"'
+        comp_match = re.search(comp_pattern, content, re.DOTALL)
+
+        if not comp_match:
+            return {"error": f"Component {reference} not found"}
+
+        # Extract the component block (from symbol to closing paren)
+        start = comp_match.start()
+        depth = 0
+        i = start
+        while i < len(content):
+            if content[i] == '(':
+                depth += 1
+            elif content[i] == ')':
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+
+        comp_block = content[start:i]
+
+        # Find all pins in this component
+        pins = []
+        for pin_match in re.finditer(r'\(pin\s+"([^"]+)"', comp_block):
+            pins.append(pin_match.group(1))
+
+        # Search for connections by finding wires near the component position
+        comp = self.get_component_by_reference(reference)
+        if not comp:
+            return {"error": f"Component {reference} not found"}
+
+        cx, cy = comp.position
+
+        # Find all labels and global labels
+        labels = []
+        for label_match in re.finditer(r'\((?:global_)?label\s+"([^"]+)"[\s\S]*?\(at\s+([\d.]+)\s+([\d.]+)', content):
+            label_name = label_match.group(1)
+            lx, ly = float(label_match.group(2)), float(label_match.group(3))
+            dist = ((lx - cx)**2 + (ly - cy)**2)**0.5
+            labels.append({"name": label_name, "position": (lx, ly), "distance": dist})
+
+        # Find hierarchical labels
+        for label_match in re.finditer(r'\(hierarchical_label\s+"([^"]+)"[\s\S]*?\(at\s+([\d.]+)\s+([\d.]+)', content):
+            label_name = label_match.group(1)
+            lx, ly = float(label_match.group(2)), float(label_match.group(3))
+            dist = ((lx - cx)**2 + (ly - cy)**2)**0.5
+            labels.append({"name": label_name, "position": (lx, ly), "distance": dist})
+
+        # Filter to nearby labels (within 20mm)
+        nearby_labels = [l for l in labels if l["distance"] < 20]
+
+        # Find nearby components (within 15mm)
+        components = self.get_components()
+        nearby_comps = []
+        for c in components:
+            if c.reference == reference:
+                continue
+            dist = ((c.position[0] - cx)**2 + (c.position[1] - cy)**2)**0.5
+            if dist < 15:
+                nearby_comps.append({
+                    "reference": c.reference,
+                    "value": c.value,
+                    "distance": dist,
+                    "position": c.position
+                })
+
+        return {
+            "component": reference,
+            "position": comp.position,
+            "pins": pins,
+            "nearby_labels": nearby_labels[:10],
+            "nearby_components": nearby_comps[:10],
+        }
+
+    def trace_net(self, reference: str, pin_number: Optional[str] = None) -> dict[str, Any]:
+        """Trace network connections from a component pin.
+
+        Args:
+            reference: Component reference (e.g., "R16")
+            pin_number: Optional pin number to trace (if None, trace all pins)
+
+        Returns:
+            Network trace information
+        """
+        connections = self.get_component_connections(reference)
+
+        if "error" in connections:
+            return connections
+
+        # Analyze the nearby data to infer network connections
+        inferred_nets = []
+
+        # Check for hierarchical labels that indicate function
+        for label in connections["nearby_labels"]:
+            label_name = label["name"]
+            if any(keyword in label_name.upper() for keyword in
+                   ["I2C", "SCL", "SDA", "SMBUS", "PMIC", "GPIO", "EN", "INT"]):
+                inferred_nets.append({
+                    "name": label_name,
+                    "type": "signal",
+                    "distance": label["distance"]
+                })
+
+        return {
+            "component": reference,
+            "position": connections["position"],
+            "inferred_connections": inferred_nets,
+            "nearby_components": connections["nearby_components"][:5],
+        }
+
+    def build_wire_network(self) -> dict[tuple[float, float], list[tuple[float, float]]]:
+        """Build a graph of wire connections.
+
+        Returns:
+            Dictionary mapping each point to its connected neighbors
+        """
+        import re
+
+        content = self.file_path.read_text()
+
+        # Find all wire segments
+        wire_pattern = r'\(wire\s+\(pts\s+\(xy\s+([\d.]+)\s+([\d.]+)\)\s+\(xy\s+([\d.]+)\s+([\d.]+)\)'
+
+        network = {}
+
+        for match in re.finditer(wire_pattern, content):
+            x1, y1 = float(match.group(1)), float(match.group(2))
+            x2, y2 = float(match.group(3)), float(match.group(4))
+
+            p1 = (x1, y1)
+            p2 = (x2, y2)
+
+            if p1 not in network:
+                network[p1] = []
+            if p2 not in network:
+                network[p2] = []
+
+            network[p1].append(p2)
+            network[p2].append(p1)
+
+        # Find junctions and merge connections
+        junction_pattern = r'\(junction\s+\(at\s+([\d.]+)\s+([\d.]+)'
+        for match in re.finditer(junction_pattern, content):
+            jx, jy = float(match.group(1)), float(match.group(2))
+            jpos = (jx, jy)
+
+            # For a junction, all wires meeting at this point should be connected
+            # Find all wire endpoints at this position (with small tolerance)
+            tolerance = 0.01  # 0.01mm tolerance
+            connected_points = [p for p in network if
+                               abs(p[0] - jx) < tolerance and abs(p[1] - jy) < tolerance]
+
+            # Merge all connections at junction
+            all_neighbors = set()
+            for p in connected_points:
+                all_neighbors.update(network[p])
+
+            for p in connected_points:
+                network[p] = list(all_neighbors)
+
+        return network
+
+    def trace_wire_network(self, reference: str, max_depth: int = 20) -> dict[str, Any]:
+        """Trace wire connections from a component.
+
+        Args:
+            reference: Component reference (e.g., "R16")
+            max_depth: Maximum connection depth to trace
+
+        Returns:
+            Dictionary with traced connections and labels
+        """
+        import re
+
+        # Get component position
+        comp = self.get_component_by_reference(reference)
+        if not comp:
+            return {"error": f"Component {reference} not found"}
+
+        cx, cy = comp.position
+
+        # Build wire network
+        network = self.build_wire_network()
+
+        # Find all labels
+        content = self.file_path.read_text()
+
+        # Find hierarchical labels
+        h_labels = []
+        for label_match in re.finditer(
+            r'\(hierarchical_label\s+"([^"]+)"[\s\S]*?\(at\s+([\d.]+)\s+([\d.]+)',
+            content
+        ):
+            name = label_match.group(1)
+            lx, ly = float(label_match.group(2)), float(label_match.group(3))
+            h_labels.append({"name": name, "position": (lx, ly)})
+
+        # Find global labels
+        g_labels = []
+        for label_match in re.finditer(
+            r'\(global_label\s+"([^"]+)"[\s\S]*?\(at\s+([\d.]+)\s+([\d.]+)',
+            content
+        ):
+            name = label_match.group(1)
+            lx, ly = float(label_match.group(2)), float(label_match.group(3))
+            g_labels.append({"name": name, "position": (lx, ly)})
+
+        all_labels = h_labels + g_labels
+
+        # Start from component position and trace
+        max_tolerance = 8.0  # 8mm max tolerance (for larger components like resistors)
+        start_point = None
+        min_dist = float('inf')
+
+        # Find the nearest wire endpoint to component
+        for point in network:
+            dist = ((point[0] - cx)**2 + (point[1] - cy)**2)**0.5
+            if dist < min_dist:
+                min_dist = dist
+                start_point = point
+
+        # Only proceed if the nearest point is within tolerance
+        if min_dist > max_tolerance:
+            return {
+                "component": reference,
+                "position": comp.position,
+                "connected_labels": [],
+                "trace_path": [],
+                "error": f"No wire found within {max_tolerance}mm (nearest: {min_dist:.2f}mm)",
+            }
+
+        # BFS trace through network
+        visited = set()
+        queue = [start_point]
+        trace_path = []
+        connected_labels = []
+
+        while queue and len(visited) < max_depth:
+            point = queue.pop(0)
+            if point in visited:
+                continue
+            visited.add(point)
+
+            trace_path.append(point)
+
+            # Check if this point is near a label
+            label_tolerance = 5.0  # 5mm tolerance for label matching
+            for label in all_labels:
+                lx, ly = label["position"]
+                dist = ((point[0] - lx)**2 + (point[1] - ly)**2)**0.5
+                if dist < label_tolerance and not any(l["name"] == label["name"] for l in connected_labels):
+                    connected_labels.append({
+                        "name": label["name"],
+                        "position": label["position"],
+                        "distance": dist,
+                    })
+
+            # Add neighbors to queue
+            if point in network:
+                for neighbor in network[point]:
+                    if neighbor not in visited:
+                        queue.append(neighbor)
+
+        return {
+            "component": reference,
+            "position": comp.position,
+            "connected_labels": connected_labels,
+            "trace_path": trace_path,
+        }

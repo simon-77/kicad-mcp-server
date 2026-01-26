@@ -32,6 +32,7 @@ from .tools import (
     components,
     summary,
     net_tracking,
+    netlist,
 )
 
 # Resources

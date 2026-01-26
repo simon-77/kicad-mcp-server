@@ -10,6 +10,18 @@ This server implements 6 core tools organized into 3 categories:
 - **Editing Tools** (2): Schematic editing, PCB layout
 - **Project Management** (1): Project creation and management
 
+## Project Status
+
+**⚠️ Work In Progress (WIP)**
+
+This project is currently under active development:
+
+- **Analysis Tools**: ✅ Production-ready
+- **Project Management**: ✅ Production-ready
+- **Editing Tools**: ⚠️ Experimental (see Limitations below)
+
+The core analysis functionality is fully functional, but editing tools are still being improved. See the [Limitations and Recommendations](#limitations-and-recommendations) section for details.
+
 ## Features
 
 ### Schematic Analysis

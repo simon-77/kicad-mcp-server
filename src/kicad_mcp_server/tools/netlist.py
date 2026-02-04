@@ -23,22 +23,24 @@ async def generate_netlist(
         if not sch_path.exists():
             return f"❌ Schematic file not found: {schematic_path}"
 
-        # KiCad 7+ uses netlist export via command line
-        # Output path
-        netlist_path = sch_path.with_suffix(".xml")
+        # KiCad 7+ uses kicad-cli for headless netlist export
+        # Output to /tmp to avoid read-only volume issues
+        netlist_path = Path("/tmp") / (sch_path.stem + ".xml")
 
         # Try to use KiCad's netlist export
         # Note: This requires KiCad to be installed and in PATH
         try:
-            # Use KiCad's Eeschema to export netlist
+            # Use kicad-cli for headless export (no display required)
             cmd = [
-                "eeschema",
+                "kicad-cli",
+                "sch",
                 "export",
                 "netlist",
                 "--format",
                 "kicadxml",
-                str(sch_path),
+                "--output",
                 str(netlist_path),
+                str(sch_path),
             ]
 
             result = subprocess.run(
@@ -75,11 +77,11 @@ Use KiCad Schematic Editor GUI to export netlist.
 """
 
         except FileNotFoundError:
-            return """⚠️ KiCad Eeschema not found in PATH.
+            return """⚠️ kicad-cli not found in PATH.
 
 Please:
-1. Install KiCad (https://www.kicad.org/)
-2. Add KiCad to system PATH
+1. Install KiCad 7+ (https://www.kicad.org/)
+2. Ensure kicad-cli is in system PATH
 3. Or use KiCad GUI to export netlist manually
 
 **Manual export:**

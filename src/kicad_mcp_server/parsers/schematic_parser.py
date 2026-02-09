@@ -7,6 +7,10 @@ from typing import Any, Optional
 
 from ..utils.file_handlers import validate_kicad_file
 
+# KiCad-defined boolean flags (fixed set, not user-extensible)
+KICAD_SYMBOL_FLAGS = ("dnp", "in_bom", "on_board", "exclude_from_sim")
+KICAD_FLAG_DEFAULTS = {"dnp": False, "in_bom": True, "on_board": True, "exclude_from_sim": False}
+
 
 @dataclass
 class SchematicComponent:
@@ -20,6 +24,7 @@ class SchematicComponent:
     position: tuple[float, float] = (0.0, 0.0)
     unit: Optional[int] = None
     pins: list[dict[str, Any]] = field(default_factory=list)
+    flags: dict[str, bool] = field(default_factory=lambda: dict(KICAD_FLAG_DEFAULTS))
 
     @classmethod
     def from_kicad_skip(cls, data: dict[str, Any]) -> "SchematicComponent":
@@ -48,6 +53,7 @@ class SchematicComponent:
             position=position,
             unit=unit,
             pins=data.get("pins", []),
+            flags=data.get("flags", dict(KICAD_FLAG_DEFAULTS)),
         )
 
 
@@ -227,6 +233,14 @@ class SchematicParser:
                 for pin_match in re.finditer(r'\(pin\s+"(\d+)"', block_text):
                     pins.append({"number": pin_match.group(1)})
 
+                # Extract component flags
+                flags = dict(KICAD_FLAG_DEFAULTS)
+                for flag in KICAD_SYMBOL_FLAGS:
+                    if f"({flag} yes)" in block_text:
+                        flags[flag] = True
+                    elif f"({flag} no)" in block_text:
+                        flags[flag] = False
+
                 # Skip library symbols (no reference)
                 if reference and not reference.startswith('#'):
                     # Build properties
@@ -244,6 +258,7 @@ class SchematicParser:
                         "properties": properties,
                         "at": {"x": x, "y": y},
                         "pins": pins,
+                        "flags": flags,
                     })
 
                 i = j + 1

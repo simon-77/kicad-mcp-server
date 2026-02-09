@@ -95,6 +95,22 @@
     (pin "4" (uuid cccccccc-cccc-cccc-cccc-cccccccccccc))
   )
 
+  (symbol (lib_id "Device:R") (at 300 100 0) (unit 1)
+    (exclude_from_sim no) (in_bom no) (on_board yes) (dnp yes)
+    (uuid 12345678-1234-1234-1234-123456789ac1)
+    (property "Reference" "R3" (at 295 95 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Value" "0R" (at 295 105 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" "Resistor_SMD:R_0402_1005Metric" (at 300 100 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+    (pin "1" (uuid dddddddd-dddd-dddd-dddd-dddddddddddd))
+    (pin "2" (uuid eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee))
+  )
+
   (net (code 1) (name "GND")
   )
 

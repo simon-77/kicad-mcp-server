@@ -6,6 +6,22 @@ from ..server import mcp
 from ..parsers.netlist_parser import NetlistParser
 
 
+def _find_root_schematic(sch_path: Path) -> Path | None:
+    """If sch_path is a sub-sheet, return the root schematic instead.
+
+    KiCad convention: root schematic has the same stem as the .kicad_pro file.
+    kicad-cli silently drops unnamed local nets when exporting from a sub-sheet,
+    so we detect this and redirect to the root schematic.
+    """
+    pro_files = list(sch_path.parent.glob("*.kicad_pro"))
+    if not pro_files:
+        return None
+    root_sch = pro_files[0].with_suffix(".kicad_sch")
+    if root_sch.exists() and root_sch.resolve() != sch_path.resolve():
+        return root_sch
+    return None
+
+
 @mcp.tool()
 async def generate_netlist(
     schematic_path: str,
@@ -22,6 +38,19 @@ async def generate_netlist(
         sch_path = Path(schematic_path)
         if not sch_path.exists():
             return f"❌ Schematic file not found: {schematic_path}"
+
+        # Detect sub-sheet and redirect to root schematic.
+        # kicad-cli silently produces incomplete netlists for sub-sheets
+        # (unnamed wire-only nets are dropped without warning).
+        subsheet_note = ""
+        root_sch = _find_root_schematic(sch_path)
+        if root_sch:
+            subsheet_note = (
+                f"\n\n⚠️ **Note:** `{sch_path.name}` is a hierarchical sub-sheet. "
+                f"Switched to root schematic `{root_sch.name}` for complete netlist "
+                f"(kicad-cli drops unnamed local nets when exporting sub-sheets directly)."
+            )
+            sch_path = root_sch
 
         # KiCad 7+ uses kicad-cli for headless netlist export
         # Output to /tmp to avoid read-only volume issues
@@ -59,7 +88,7 @@ You can now use netlist-based tools:
 - `trace_netlist_connection()` - Trace component connections via netlist
 - `get_netlist_nets()` - List all nets
 - `get_netlist_components()` - List all components with their nets
-"""
+{subsheet_note}"""
             else:
                 # Fallback: return instructions
                 return f"""⚠️ Automatic netlist generation failed.

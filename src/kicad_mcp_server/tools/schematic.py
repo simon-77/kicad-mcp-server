@@ -9,6 +9,7 @@ async def list_schematic_components(
     file_path: str,
     filter_type: str | None = None,
     filter_value: str | None = None,
+    filter_dnp: bool | None = None,
 ) -> str:
     """List all components in a KiCad schematic file.
 
@@ -16,6 +17,7 @@ async def list_schematic_components(
         file_path: Path to .kicad_sch file
         filter_type: Optional filter by component type prefix (e.g., 'R', 'C', 'U', 'IC')
         filter_value: Optional filter by component value (partial match)
+        filter_dnp: Optional filter by DNP flag (True=only DNP, False=only non-DNP)
 
     Returns:
         Formatted list of components with their properties
@@ -31,22 +33,40 @@ async def list_schematic_components(
         if filter_value:
             components = [c for c in components if filter_value.lower() in c.value.lower()]
 
+        if filter_dnp is not None:
+            components = [c for c in components if c.flags.get("dnp", False) == filter_dnp]
+
         if not components:
             return "No components found matching the specified criteria."
 
+        # Check if any non-default flags exist
+        has_dnp = any(c.flags.get("dnp", False) for c in components)
+        has_not_in_bom = any(not c.flags.get("in_bom", True) for c in components)
+
         # Format output
+        header = "| Reference | Value | Footprint | Library |"
+        separator = "|-----------|-------|-----------|---------|"
+        if has_dnp or has_not_in_bom:
+            header += " DNP | In BOM |"
+            separator += "-----|--------|"
+
         lines = [
             f"# Components in {file_path}",
             f"Total: {len(components)} component(s)",
             "",
-            "| Reference | Value | Footprint | Library |",
-            "|-----------|-------|-----------|---------|",
+            header,
+            separator,
         ]
 
         for comp in components:
             footprint = comp.footprint or "-"
             library = comp.library_id.split(":")[-1] if ":" in comp.library_id else comp.library_id
-            lines.append(f"| {comp.reference} | {comp.value} | {footprint} | {library} |")
+            row = f"| {comp.reference} | {comp.value} | {footprint} | {library} |"
+            if has_dnp or has_not_in_bom:
+                dnp = "Yes" if comp.flags.get("dnp", False) else ""
+                in_bom = "No" if not comp.flags.get("in_bom", True) else ""
+                row += f" {dnp} | {in_bom} |"
+            lines.append(row)
 
         return "\n".join(lines)
 

@@ -6,6 +6,22 @@ from ..server import mcp
 from ..parsers.netlist_parser import NetlistParser
 
 
+def _find_root_schematic(sch_path: Path) -> Path | None:
+    """If sch_path is a sub-sheet, return the root schematic instead.
+
+    KiCad convention: root schematic has the same stem as the .kicad_pro file.
+    kicad-cli silently drops unnamed local nets when exporting from a sub-sheet,
+    so we detect this and redirect to the root schematic.
+    """
+    pro_files = list(sch_path.parent.glob("*.kicad_pro"))
+    if not pro_files:
+        return None
+    root_sch = pro_files[0].with_suffix(".kicad_sch")
+    if root_sch.exists() and root_sch.resolve() != sch_path.resolve():
+        return root_sch
+    return None
+
+
 @mcp.tool()
 async def generate_netlist(
     schematic_path: str,
@@ -23,22 +39,37 @@ async def generate_netlist(
         if not sch_path.exists():
             return f"❌ Schematic file not found: {schematic_path}"
 
-        # KiCad 7+ uses netlist export via command line
-        # Output path
-        netlist_path = sch_path.with_suffix(".xml")
+        # Detect sub-sheet and redirect to root schematic.
+        # kicad-cli silently produces incomplete netlists for sub-sheets
+        # (unnamed wire-only nets are dropped without warning).
+        subsheet_note = ""
+        root_sch = _find_root_schematic(sch_path)
+        if root_sch:
+            subsheet_note = (
+                f"\n\n⚠️ **Note:** `{sch_path.name}` is a hierarchical sub-sheet. "
+                f"Switched to root schematic `{root_sch.name}` for complete netlist "
+                f"(kicad-cli drops unnamed local nets when exporting sub-sheets directly)."
+            )
+            sch_path = root_sch
+
+        # KiCad 7+ uses kicad-cli for headless netlist export
+        # Output to /tmp to avoid read-only volume issues
+        netlist_path = Path("/tmp") / (sch_path.stem + ".xml")
 
         # Try to use KiCad's netlist export
         # Note: This requires KiCad to be installed and in PATH
         try:
-            # Use KiCad's Eeschema to export netlist
+            # Use kicad-cli for headless export (no display required)
             cmd = [
-                "eeschema",
+                "kicad-cli",
+                "sch",
                 "export",
                 "netlist",
                 "--format",
                 "kicadxml",
-                str(sch_path),
+                "--output",
                 str(netlist_path),
+                str(sch_path),
             ]
 
             result = subprocess.run(
@@ -57,7 +88,7 @@ You can now use netlist-based tools:
 - `trace_netlist_connection()` - Trace component connections via netlist
 - `get_netlist_nets()` - List all nets
 - `get_netlist_components()` - List all components with their nets
-"""
+{subsheet_note}"""
             else:
                 # Fallback: return instructions
                 return f"""⚠️ Automatic netlist generation failed.
@@ -75,11 +106,11 @@ Use KiCad Schematic Editor GUI to export netlist.
 """
 
         except FileNotFoundError:
-            return """⚠️ KiCad Eeschema not found in PATH.
+            return """⚠️ kicad-cli not found in PATH.
 
 Please:
-1. Install KiCad (https://www.kicad.org/)
-2. Add KiCad to system PATH
+1. Install KiCad 7+ (https://www.kicad.org/)
+2. Ensure kicad-cli is in system PATH
 3. Or use KiCad GUI to export netlist manually
 
 **Manual export:**

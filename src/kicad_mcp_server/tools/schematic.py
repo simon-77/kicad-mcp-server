@@ -223,18 +223,17 @@ async def list_schematic_nets(
         for net in sorted(nets, key=lambda n: n.name):
             lines.append(f"| {net.name} | {net.type} | {net.code} |")
 
-        # WORKAROUND: KiCad #23172 — sub-sheet unnamed nets silently dropped
+        # Sub-sheet detection: unnamed nets can't be resolved without hierarchy
         root_sch = _find_root_schematic(Path(file_path))
         if root_sch:
             lines.append("")
             lines.append(
                 f"**Note:** `{Path(file_path).name}` is a sub-sheet. "
-                f"Unnamed wire-only nets may be missing due to a KiCad limitation "
-                f"([gitlab#23172](https://gitlab.com/kicad/code/kicad/-/issues/23172)). "
+                f"Unnamed wire-only nets cannot be resolved without the full "
+                f"hierarchy context and will not appear here. "
                 f"Use `generate_netlist` on the root schematic `{root_sch.name}` "
                 f"for complete net data."
             )
-        # END WORKAROUND: KiCad #23172
 
         return "\n".join(lines)
 

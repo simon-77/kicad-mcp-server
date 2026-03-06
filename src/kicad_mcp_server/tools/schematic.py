@@ -1,7 +1,10 @@
 """Schematic analysis tools for KiCad MCP Server."""
 
+from pathlib import Path
+
 from ..server import mcp
 from ..parsers.schematic_parser import SchematicParser
+from ..tools.netlist import _find_root_schematic
 
 
 @mcp.tool()
@@ -219,6 +222,19 @@ async def list_schematic_nets(
 
         for net in sorted(nets, key=lambda n: n.name):
             lines.append(f"| {net.name} | {net.type} | {net.code} |")
+
+        # WORKAROUND: KiCad #23172 — sub-sheet unnamed nets silently dropped
+        root_sch = _find_root_schematic(Path(file_path))
+        if root_sch:
+            lines.append("")
+            lines.append(
+                f"**Note:** `{Path(file_path).name}` is a sub-sheet. "
+                f"Unnamed wire-only nets may be missing due to a KiCad limitation "
+                f"([gitlab#23172](https://gitlab.com/kicad/code/kicad/-/issues/23172)). "
+                f"Use `generate_netlist` on the root schematic `{root_sch.name}` "
+                f"for complete net data."
+            )
+        # END WORKAROUND: KiCad #23172
 
         return "\n".join(lines)
 

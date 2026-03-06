@@ -2,11 +2,12 @@
 
 import subprocess
 from pathlib import Path
+from typing import Optional
 from ..server import mcp
 from ..parsers.netlist_parser import NetlistParser
 
 
-def _find_root_schematic(sch_path: Path) -> Path | None:
+def _find_root_schematic(sch_path: Path) -> Optional[Path]:
     """If sch_path is a sub-sheet, return the root schematic instead.
 
     KiCad convention: root schematic has the same stem as the .kicad_pro file.
@@ -14,7 +15,7 @@ def _find_root_schematic(sch_path: Path) -> Path | None:
     nets, so we redirect to the root schematic for complete netlist export.
     """
     pro_files = list(sch_path.parent.glob("*.kicad_pro"))
-    if not pro_files:
+    if len(pro_files) != 1:
         return None
     root_sch = pro_files[0].with_suffix(".kicad_sch")
     if root_sch.exists() and root_sch.resolve() != sch_path.resolve():

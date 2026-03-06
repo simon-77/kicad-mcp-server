@@ -208,7 +208,22 @@ async def list_schematic_nets(
             power_keywords = ["gnd", "vcc", "vdd", "vss", "+", "-"]
             nets = [n for n in nets if any(kw in n.name.lower() for kw in power_keywords)]
 
+        # Sub-sheet detection: unnamed nets can't be resolved without hierarchy
+        sch_path = Path(file_path)
+        root_sch = _find_root_schematic(sch_path)
+        subsheet_note = ""
+        if root_sch:
+            subsheet_note = (
+                f"**Note:** `{sch_path.name}` is a sub-sheet. "
+                f"Unnamed wire-only nets cannot be resolved without the full "
+                f"hierarchy context and will not appear here. "
+                f"Use `generate_netlist` on the root schematic `{root_sch.name}` "
+                f"for complete net data."
+            )
+
         if not nets:
+            if subsheet_note:
+                return f"No nets found.\n\n{subsheet_note}"
             return "No nets found."
 
         # Format output
@@ -223,17 +238,9 @@ async def list_schematic_nets(
         for net in sorted(nets, key=lambda n: n.name):
             lines.append(f"| {net.name} | {net.type} | {net.code} |")
 
-        # Sub-sheet detection: unnamed nets can't be resolved without hierarchy
-        root_sch = _find_root_schematic(Path(file_path))
-        if root_sch:
+        if subsheet_note:
             lines.append("")
-            lines.append(
-                f"**Note:** `{Path(file_path).name}` is a sub-sheet. "
-                f"Unnamed wire-only nets cannot be resolved without the full "
-                f"hierarchy context and will not appear here. "
-                f"Use `generate_netlist` on the root schematic `{root_sch.name}` "
-                f"for complete net data."
-            )
+            lines.append(subsheet_note)
 
         return "\n".join(lines)
 

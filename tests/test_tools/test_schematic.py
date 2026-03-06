@@ -64,6 +64,17 @@ class TestSchematicParser:
         assert net_by_name["+3V3"].type == "local"
         assert net_by_name["GND"].type == "power"
 
+    def test_hierarchical_labels_in_nets(self, example_schematic):
+        """Test that hierarchical labels appear in nets."""
+        parser = SchematicParser(str(example_schematic))
+        nets = parser.get_nets()
+
+        net_by_name = {n.name: n for n in nets}
+        assert "SDA" in net_by_name
+        assert "SCL" in net_by_name
+        assert net_by_name["SDA"].type == "hierarchical"
+        assert net_by_name["SCL"].type == "hierarchical"
+
     def test_get_component_by_reference(self, example_schematic):
         """Test getting component by reference."""
         parser = SchematicParser(str(example_schematic))
@@ -168,6 +179,16 @@ class TestSchematicTools:
         result = await schematic.search_symbols(str(example_schematic), "ESP32")
 
         assert "U1" in result
+
+    @pytest.mark.asyncio
+    async def test_list_schematic_nets_hierarchical(self, example_schematic):
+        """Test list_schematic_nets includes hierarchical labels with type."""
+        result = await schematic.list_schematic_nets(str(example_schematic))
+
+        assert "SDA" in result
+        assert "SCL" in result
+        assert "hierarchical" in result
+        assert "| Type |" in result
 
     @pytest.mark.asyncio
     async def test_get_schematic_info(self, example_schematic):

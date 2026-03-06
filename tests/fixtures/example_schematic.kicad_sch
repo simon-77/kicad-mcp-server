@@ -231,6 +231,16 @@
     (uuid dddddddd-dddd-dddd-dddd-ffffffffffff)
   )
 
+  (hierarchical_label "SDA" (shape bidirectional) (at 160 90 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid aaaaaaaa-aaaa-aaaa-aaaa-ffffffffffff)
+  )
+
+  (hierarchical_label "SCL" (shape bidirectional) (at 160 95 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid bbbbbbbb-bbbb-bbbb-bbbb-ffffffffffff)
+  )
+
   (symbol (lib_id "power:GND") (at 100 120 0) (unit 1)
     (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)
     (uuid cccccccc-cccc-cccc-cccc-ffffffffffff)

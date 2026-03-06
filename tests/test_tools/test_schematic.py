@@ -56,6 +56,18 @@ class TestSchematicParser:
         net_names = [n.name for n in nets]
         assert "GND" in net_names
         assert "+3V3" in net_names
+        assert "SPI_CLK" in net_names
+
+    def test_hierarchical_labels_in_nets(self, example_schematic):
+        """Test that hierarchical labels appear in nets."""
+        parser = SchematicParser(str(example_schematic))
+        nets = parser.get_nets()
+
+        net_by_name = {n.name: n for n in nets}
+        assert "SDA" in net_by_name
+        assert "SCL" in net_by_name
+        assert net_by_name["SDA"].type == "hierarchical"
+        assert net_by_name["SCL"].type == "hierarchical"
 
     def test_get_component_by_reference(self, example_schematic):
         """Test getting component by reference."""
@@ -81,7 +93,7 @@ class TestSchematicTools:
     @pytest.mark.asyncio
     async def test_list_schematic_components(self, example_schematic):
         """Test list_schematic_components tool."""
-        result = await schematic.list_schematic_components.fn(str(example_schematic))
+        result = await schematic.list_schematic_components(str(example_schematic))
 
         assert "R1" in result
         assert "10k" in result
@@ -93,21 +105,21 @@ class TestSchematicTools:
     @pytest.mark.asyncio
     async def test_filter_dnp_true(self, example_schematic):
         """Test filtering for DNP-only components."""
-        result = await schematic.list_schematic_components.fn(str(example_schematic), filter_dnp=True)
+        result = await schematic.list_schematic_components(str(example_schematic), filter_dnp=True)
         assert "R3" in result
         assert "R1" not in result
 
     @pytest.mark.asyncio
     async def test_filter_dnp_false(self, example_schematic):
         """Test filtering for non-DNP components."""
-        result = await schematic.list_schematic_components.fn(str(example_schematic), filter_dnp=False)
+        result = await schematic.list_schematic_components(str(example_schematic), filter_dnp=False)
         assert "R1" in result
         assert "R3" not in result
 
     @pytest.mark.asyncio
     async def test_get_symbol_details(self, example_schematic):
         """Test get_symbol_details tool."""
-        result = await schematic.get_symbol_details.fn(str(example_schematic), "R1")
+        result = await schematic.get_symbol_details(str(example_schematic), "R1")
 
         assert "R1" in result
         assert "10k" in result
@@ -116,14 +128,24 @@ class TestSchematicTools:
     @pytest.mark.asyncio
     async def test_search_symbols(self, example_schematic):
         """Test search_symbols tool."""
-        result = await schematic.search_symbols.fn(str(example_schematic), "ESP32")
+        result = await schematic.search_symbols(str(example_schematic), "ESP32")
 
         assert "U1" in result
 
     @pytest.mark.asyncio
+    async def test_list_schematic_nets_hierarchical(self, example_schematic):
+        """Test list_schematic_nets includes hierarchical labels with type."""
+        result = await schematic.list_schematic_nets(str(example_schematic))
+
+        assert "SDA" in result
+        assert "SCL" in result
+        assert "hierarchical" in result
+        assert "| Type |" in result
+
+    @pytest.mark.asyncio
     async def test_get_schematic_info(self, example_schematic):
         """Test get_schematic_info tool."""
-        result = await schematic.get_schematic_info.fn(str(example_schematic))
+        result = await schematic.get_schematic_info(str(example_schematic))
 
         assert "Example Project" in result
         assert "Components by Type" in result
